@@ -74,8 +74,17 @@ function opValue(op: PatchOp): string | null {
       return op.position;
     case 'insertHTML':
       return op.position;
-    case 'setBehavior':
-      return `${op.event}:${op.mode}`;
+    case 'setBehavior': {
+      // What the click/submit actually does: two different actions on one element must conflict.
+      const a = op.action;
+      const what =
+        a.type === 'navigate'
+          ? `go to ${a.url}`
+          : a.type === 'preventDefault'
+            ? 'do nothing'
+            : `${a.type} ${a.target.anchor}`;
+      return op.mode === 'replace' ? what : `${what}, then the original`;
+    }
   }
 }
 
