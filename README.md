@@ -96,9 +96,22 @@ Then open `http://localhost:5173` and follow the demo script in `docs/PLAN.md` s
 (`http://localhost:5173` in `.env.example`). The built UI on :4000 works for everything except
 picking; to pick from :4000 instead, set `PW_EDITOR_ORIGIN=http://localhost:4000` in `.env`.
 
-Screens: Review & merge (merge P4, or a conflicting patch to see `SAME_PROPERTY`), Releases (create R2,
-force-deploy it and watch the automatic rollback to R1), Drift & audit (simulate the v2 redeploy,
-check now, propose a quarantine release, verify and deploy it, read the audit chain).
+The demo story, all in the UI (no terminal):
+
+1. **Studio** (home): the Original tab shows ShopLite's broken checkout. Click **Pick something on the
+   page**, pick "Proceed to checkout", choose **Make it do something when clicked** (go to `/checkout`).
+   The Preview updates; the Live tab is unchanged. **Test it now** runs a real browser, then
+   **Send for review**.
+2. **Review**: **Approve as Vishwaa**, **Merge as Vishwaa**. Then open Adnan's "Send checkout to the
+   cart summary": Approve, Merge, and the conflict card explains the clash on the same button.
+3. **Ship**: create the release, **Run browser test**, **Deploy as Kshant**. Leave the Studio open on
+   the Live tab in another window: it reloads by itself ("Live site updated to R2").
+4. Bad release: merge "Restyle checkout button" in Review, create a release on Ship and
+   **Force deploy**. The live health check fails and the site rolls itself back. Wait until the
+   timeline shows the rollback's health check passing before the next step.
+5. **Drift Sentinel**: **Run drift drill** (ShopLite redesigns to v2), toggle **What would a
+   selector-only tool do?**, then **Ship safe release as Kshant**. **Restore original site (v1)** after.
+6. **History**: every step as a sentence, with the tamper-evident chain check.
 
 Checks without a browser: `npm run smoke:slice` on a fresh `npm run reset` drives the whole slice
 over HTTP (preview isolation, review, merge conflict, verified deploy, rollback, audit chain).
@@ -110,17 +123,18 @@ Before a real demo, set the upstream back to v1 and reset:
 | Planned | This build |
 | --- | --- |
 | Snapshots with Playwright element boxes | `fetch` of the upstream HTML, no element boxes (ShopLite is static) |
-| Visual diff masked around patched elements | Whole-page pixel diff, reported as a warning; checks and new console errors decide pass/fail |
+| Visual diff blocks on unexpected change | Masked pixel diff (patched elements + 8 px) is reported, never blocks; checks and new console errors decide pass/fail |
 | Health = post-deploy run + 30 s beacon window | Post-deploy live verification run only; failure rolls back automatically |
-| Separate Review, Releases, Drift, Audit screens | Three screens: Review & merge, Releases, Drift & audit |
-| Heal proposals in the UI | Drift report + quarantine release only |
+| Heal proposals with their own UI | A healed fix arrives in Review as an update to a live fix; the drill ships a safe release |
+| Drift before/after element crops | Evidence in words, confidence meter and runner-up; no image crops |
 | Playwright E2E journeys | `smoke:slice`, `demo:setup` and a manual click-through |
 | `patchwork_llm` benchmark row | Removed: no model is called, so it only repeated the `patchwork` numbers |
 
-Known result on v2: the checkout fix (P1) is reported **broken**, not relocated. The redesigned
+Known result on v2: the checkout fix is reported **broken**, not relocated. The redesigned
 button changes id, classes, neighbours and position at once, so its best match scores 0.41, under
 the 0.65 relocate threshold; the resolver abstains instead of guessing (the "Save cart for later"
-decoy is the runner-up at 0.26). The quarantine release therefore leaves P1 out.
+decoy is the runner-up at 0.26). The safe release therefore leaves the checkout fix out, while the
+price fix is healed (a selector-only tool loses all three fixes).
 
 ## AI assistance
 
