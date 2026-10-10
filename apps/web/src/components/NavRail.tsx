@@ -10,16 +10,15 @@ interface Item {
 const ITEMS: Item[] = [
   { to: '', label: 'Overview' },
   { to: 'patches', label: 'Patches' },
-  { to: 'editor', label: 'Editor', step: 'step 7' },
-  { to: 'review', label: 'Review & merge', step: 'step 8' },
-  { to: 'releases', label: 'Releases', step: 'step 9' },
-  { to: 'drift', label: 'Drift Sentinel', step: 'step 10' },
-  { to: 'audit', label: 'Audit', step: 'step 11' },
+  { to: 'editor', label: 'Editor' },
+  { to: 'review', label: 'Review & merge' },
+  { to: 'releases', label: 'Releases' },
+  { to: 'drift', label: 'Drift & audit' },
 ];
 
 export function NavRail({ patchCount }: { patchCount: number | null }) {
   const segments = useRoute();
-  const active = segments[0] ?? '';
+  const active = segments[0] === 'audit' ? 'drift' : (segments[0] ?? '');
 
   return (
     <nav className={styles.rail} aria-label="Sections">

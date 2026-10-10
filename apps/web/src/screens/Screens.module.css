@@ -1,0 +1,309 @@
+/* Shared layout for Review, Releases and Drift & Audit.
+   Same workbench language as the rest of the app: hairlines, no shadows,
+   left-aligned columns of comparable numbers. */
+
+.head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.lede {
+  max-width: 70ch;
+  color: var(--ink-2);
+  font-size: var(--fs-s);
+  margin-bottom: 1.25rem;
+}
+
+.block {
+  margin-top: 2rem;
+}
+
+.block > h2 {
+  margin-bottom: 0.75rem;
+}
+
+.split {
+  display: grid;
+  grid-template-columns: minmax(14rem, 20rem) 1fr;
+  gap: 1.5rem;
+  align-items: start;
+}
+
+@media (max-width: 900px) {
+  .split {
+    grid-template-columns: 1fr;
+  }
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--line);
+}
+
+.listItem {
+  border-bottom: 1px solid var(--line);
+}
+
+.listButton {
+  display: block;
+  width: 100%;
+  padding: 0.55rem 0.5rem;
+  border: 0;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+
+.listButton:hover {
+  background: var(--surface);
+}
+
+.listButton[aria-current='true'] {
+  background: var(--surface);
+  box-shadow: inset 3px 0 0 var(--blueprint);
+}
+
+.listMeta {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  margin-top: 0.2rem;
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+}
+
+.panel {
+  padding: 1rem 1.1rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.panelHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 0.4rem;
+}
+
+.meta {
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+  margin-bottom: 0.9rem;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 1rem 0 0.5rem;
+}
+
+.field {
+  flex: 1 1 16rem;
+  min-width: 0;
+  padding: 0.3rem 0.5rem;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: #fff;
+  font: inherit;
+  font-size: var(--fs-s);
+}
+
+.subhead {
+  margin: 1.1rem 0 0.4rem;
+  font-size: var(--fs-s);
+  color: var(--ink-2);
+}
+
+.stack > * + * {
+  margin-top: 0.6rem;
+}
+
+/* conflict cards: severity is the left rule, never colour alone (chip carries the word) */
+.conflict {
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--atrisk);
+  border-radius: var(--radius);
+  background: #fff;
+  font-size: var(--fs-s);
+}
+
+.conflictBlocking {
+  border-left-color: var(--broken);
+}
+
+.conflictHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.25rem;
+}
+
+.values {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.1rem 0.75rem;
+  margin: 0.4rem 0;
+  font-size: var(--fs-xs);
+}
+
+.values dt {
+  color: var(--ink-3);
+}
+
+.values dd {
+  margin: 0;
+}
+
+/* verification evidence: three images compared side by side */
+.shots {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+@media (max-width: 700px) {
+  .shots {
+    grid-template-columns: 1fr;
+  }
+}
+
+.shot {
+  margin: 0;
+  font-size: var(--fs-xs);
+  color: var(--ink-2);
+}
+
+.shot img {
+  display: block;
+  width: 100%;
+  max-height: 22rem;
+  object-fit: cover;
+  object-position: top;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #fff;
+}
+
+.shot figcaption {
+  margin-top: 0.25rem;
+}
+
+/* deployment timeline: a real sequence, so it is drawn as one */
+.timeline {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 0 1rem;
+  border-left: 1px solid var(--line-strong);
+}
+
+.event {
+  position: relative;
+  padding: 0 0 0.9rem 0.75rem;
+  font-size: var(--fs-s);
+}
+
+.event::before {
+  content: '';
+  position: absolute;
+  left: -1.33rem;
+  top: 0.45rem;
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 50%;
+  background: var(--paper);
+  border: 2px solid var(--ink-3);
+}
+
+.eventAuto::before {
+  border-color: var(--broken);
+  background: var(--broken-soft);
+}
+
+.eventLine {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.reason {
+  color: var(--ink-2);
+  font-size: var(--fs-xs);
+  max-width: 70ch;
+}
+
+/* drift: one card per patch, anchors listed with the confidence meter */
+.anchorRow {
+  display: grid;
+  grid-template-columns: 7rem 7.5rem minmax(10rem, 1fr);
+  gap: 0.75rem;
+  align-items: center;
+  padding: 0.45rem 0;
+  border-top: 1px solid var(--line);
+  font-size: var(--fs-s);
+}
+
+@media (max-width: 700px) {
+  .anchorRow {
+    grid-template-columns: 1fr;
+  }
+}
+
+.evidence {
+  grid-column: 1 / -1;
+  font-size: var(--fs-xs);
+  color: var(--ink-2);
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: var(--fs-s);
+}
+
+.small {
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+}
+
+.pre {
+  margin: 0;
+  max-width: 44ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--fs-xs);
+  color: var(--ink-2);
+}
+
+/* wide tables scroll inside their own box on narrow screens, never the page */
+.scroll {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+/* visible to screen readers only */
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.shot img {
+  height: auto;
+}

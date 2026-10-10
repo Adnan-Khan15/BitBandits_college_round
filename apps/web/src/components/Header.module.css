@@ -58,3 +58,29 @@
   color: var(--ink-3);
   font-size: var(--fs-xs);
 }
+
+/* phones: the identity strip wraps instead of pushing the page sideways */
+@media (max-width: 600px) {
+  .header {
+    flex-wrap: wrap;
+    height: auto;
+    min-height: var(--header-h);
+    padding: 0.5rem 1rem;
+    gap: 0.4rem 1rem;
+  }
+
+  .user {
+    min-width: 0;
+    flex: 1 1 100%;
+  }
+
+  .select {
+    min-width: 0;
+    flex: 1;
+  }
+
+  .userLabel,
+  .role {
+    white-space: nowrap;
+  }
+}

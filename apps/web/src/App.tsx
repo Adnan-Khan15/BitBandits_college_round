@@ -7,20 +7,16 @@ import { Notice } from './components/Notice.js';
 import { OverviewScreen } from './screens/OverviewScreen.js';
 import { PatchesScreen } from './screens/PatchesScreen.js';
 import { EditorScreen } from './editor/EditorScreen.js';
+import { ReviewScreen } from './screens/ReviewScreen.js';
+import { ReleasesScreen } from './screens/ReleasesScreen.js';
+import { DriftAuditScreen } from './screens/DriftAuditScreen.js';
 import styles from './App.module.css';
 
-/** Screens that are planned but not built yet are named honestly, with their step. */
-const PLANNED: Record<string, string> = {
-  review: 'Review and merge: conflict cards, evidence and resolution choices.',
-  releases: 'Releases: verify, deploy, health and rollback.',
-  drift: 'Drift Sentinel: re-anchor evidence, heal proposals and quarantine releases.',
-  audit: 'Audit: the hash-chained trail of every change.',
-};
 
 export function App() {
   const segments = useRoute();
   const section = segments[0] ?? '';
-  const knownScreens = ['', 'patches', 'editor', ...Object.keys(PLANNED)];
+  const knownScreens = ['', 'patches', 'editor', 'review', 'releases', 'drift', 'audit'];
 
   const { data } = usePoll(async () => {
     const projects = await api.projects();
@@ -39,11 +35,9 @@ export function App() {
           {section === '' ? <OverviewScreen /> : null}
           {section === 'patches' ? <PatchesScreen /> : null}
           {section === 'editor' ? <EditorScreen /> : null}
-          {PLANNED[section] ? (
-            <Notice tone="empty" title={`Not built yet — ${section}`}>
-              {PLANNED[section]} Planned for {section} in the phase plan; nothing here is mocked.
-            </Notice>
-          ) : null}
+          {section === 'review' ? <ReviewScreen /> : null}
+          {section === 'releases' ? <ReleasesScreen /> : null}
+          {section === 'drift' || section === 'audit' ? <DriftAuditScreen /> : null}
           {!knownScreens.includes(section) ? (
             <Notice tone="error" title="Not found">
               No screen called “{section}”. <a href="#/">Back to overview</a>.
