@@ -12,8 +12,8 @@ import { createDriftService } from './drift/index.js';
 
 export function buildRegistry(db: Db): ServiceRegistry {
   const registry = {} as ServiceRegistry;
-  registry.audit = createAuditService();
-  registry.core = createCoreService();
+  registry.audit = createAuditService(db);
+  registry.core = createCoreService(db);
   registry.snapshots = createSnapshotService();
   registry.verify = createVerifyService();
   registry.releases = createReleaseService();

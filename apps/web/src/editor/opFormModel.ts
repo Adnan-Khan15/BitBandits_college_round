@@ -1,4 +1,4 @@
-// apps/web/src/editor/opForm.ts (owner: Dev D)
+// apps/web/src/editor/opFormModel.ts (owner: Dev D)
 // The form model for authoring patch ops, and the single mapping from it to the
 // frozen PatchOp contract (PLAN 11.3). Forms hold plain strings for anchors and
 // actions; this module is the one place that builds TargetRefs and validates

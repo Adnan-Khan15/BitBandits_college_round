@@ -8,7 +8,7 @@ import {
   opPropertyKey,
   OP_KINDS,
   type OpDraft,
-} from '../src/editor/opForm.js';
+} from '../src/editor/opFormModel.js';
 
 describe('opDraftToOp', () => {
   it('maps setText with a TargetRef anchor', () => {

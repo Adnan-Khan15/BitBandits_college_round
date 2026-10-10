@@ -330,8 +330,8 @@ describe('analyzeDrift', () => {
     const d = doc('<div class="wrap"><button id="save" class="btn">Save</button></div>');
     const p = makePatch({ anchors: { a1: fpOf(d, '#save') }, ops: [] });
     const [result] = analyzeDrift(d, [p]);
-    expect(result.health).toBe('healthy');
-    expect(result.proposedFingerprints).toBeNull();
+    expect(result!.health).toBe('healthy');
+    expect(result!.proposedFingerprints).toBeNull();
   });
 
   it('marks a relocated target healed and proposes fingerprints', () => {
@@ -339,8 +339,8 @@ describe('analyzeDrift', () => {
     const after = doc('<div class="wrap"><button id="save2" class="btn">Save</button></div>');
     const p = makePatch({ anchors: { a1: fpOf(before, '#save') }, ops: [] });
     const [result] = analyzeDrift(after, [p]);
-    expect(result.health).toBe('healed');
-    expect(result.proposedFingerprints?.a1.id).toBe('save2');
+    expect(result!.health).toBe('healed');
+    expect(result!.proposedFingerprints?.a1!.id).toBe('save2');
   });
 
   it('marks a missing target broken', () => {
@@ -348,7 +348,7 @@ describe('analyzeDrift', () => {
     const after = doc('<div class="wrap"><p>gone</p></div>');
     const p = makePatch({ anchors: { a1: fpOf(before, '#save') }, ops: [] });
     const [result] = analyzeDrift(after, [p]);
-    expect(result.health).toBe('broken');
+    expect(result!.health).toBe('broken');
   });
 });
 

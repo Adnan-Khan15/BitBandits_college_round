@@ -25,6 +25,14 @@ contracts, schedule) and packages/shared (types). If they disagree, STOP and rep
   git checkout -- on others' files, merging any other ws/* branch, npm install <pkg>, deleting files
   outside your paths, editing .git/, writing secrets to files.
 
+## Dependencies & installs
+- After any `git merge origin/integration`: run `npm ci` before `npm run typecheck && npm test`.
+  A merged PR may add a dependency; stale node_modules turns the whole team red.
+- A PR that adds/changes a dependency must announce it (package + workspace + why) in the PR body.
+- npm >= 11 blocks dependency install scripts by default. Reviewed approvals live in the root
+  package.json `allowScripts` field (currently esbuild). Check pending ones with
+  `npm install-scripts ls`; never approve a package without a reason.
+
 ## Quality bar
 - TypeScript strict; no `any` in exported signatures; no stubs left in code you mark done.
 - Every exported function has a unit test. Run `npm run typecheck && npm test` before reporting done.
