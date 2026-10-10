@@ -1,0 +1,7 @@
+{
+  "id": "dev-ren-class-01",
+  "category": "renamed",
+  "targetBefore": ".product-card",
+  "expectedAfter": ".product-tile",
+  "notes": "Class renamed product-card -> product-tile; element has no id, so id and testId are null on both sides and classes carry the match. Expected: relocated."
+}

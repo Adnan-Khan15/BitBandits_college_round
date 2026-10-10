@@ -1,0 +1,7 @@
+{
+  "id": "dev-decoy-abstain-01",
+  "category": "decoy",
+  "targetBefore": "[data-sku=\"m1\"]",
+  "expectedAfter": null,
+  "notes": "The target's list twin is duplicated: the second item becomes an identical Wireless Mouse card. Tag, classes, text, ancestors and neighbourText then tie for both buttons; only xpath and siblingIndex differ, which must not clear the 0.15 margin. data-sku is not a captured fingerprint feature. Expected: ambiguous (abstain), never a confident wrong target."
+}

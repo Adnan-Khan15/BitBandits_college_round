@@ -1,0 +1,42 @@
+{
+  "name": "patchwork",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "PATCHWORK - patch existing websites through independently managed, reviewed, verified and reversible patches.",
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "concurrently -k -n target,runtime,server,web -c yellow,cyan,green,magenta \"npm run target\" \"npm run build:runtime -- --watch\" \"npm run dev:server\" \"npm run dev:web\"",
+    "dev:server": "tsx watch apps/server/src/main.ts",
+    "dev:web": "npm run dev --workspace @patchwork/web",
+    "start": "npm run build && tsx apps/server/src/main.ts",
+    "build": "npm run build:runtime && npm run build:web && npm run typecheck",
+    "build:runtime": "node packages/runtime/build.mjs",
+    "build:web": "npm run build --workspace @patchwork/web",
+    "typecheck": "npm run typecheck --workspaces --if-present && tsc --noEmit -p scripts",
+    "test": "vitest run",
+    "test:e2e": "playwright test",
+    "target": "node fixtures/target-site/server.mjs",
+    "seed": "tsx scripts/seed.ts",
+    "reset": "tsx scripts/reset.ts",
+    "demo:setup": "tsx scripts/demo-setup.ts",
+    "smoke:slice": "tsx scripts/smoke-slice.ts",
+    "smoke:full": "tsx scripts/smoke-full.ts",
+    "bench": "tsx packages/engine/bench/run.ts",
+    "sample": "node fixtures/sample-site/server.mjs"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.64.0",
+    "@types/node": "^24.0.0",
+    "concurrently": "10.0.6",
+    "tsx": "4.23.15",
+    "typescript": "5.9.3",
+    "vitest": "5.0.3"
+  }
+}

@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Cart — ShopLite</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <header class="site-header">
+    <a class="logo" href="/">ShopLite</a>
+    <nav class="site-nav">
+      <a href="/">Home</a>
+      <a href="/checkout">Checkout</a>
+      <a href="/cart">Cart</a>
+    </nav>
+  </header>
+
+  <main class="container">
+    <h1 class="page-title">Your cart</h1>
+    <p class="tagline">2 items ready to go.</p>
+
+    <ul class="cart-lines" data-cart>
+      <li class="cart-line" data-price="2499">
+        <span class="cart-line__thumb" aria-hidden="true">WH</span>
+        <span>
+          <span class="cart-line__name">Wireless Headphones</span><br>
+          <span class="cart-line__meta">₹2,499 each</span>
+        </span>
+        <input class="qty" type="number" min="1" value="1" aria-label="Quantity: Wireless Headphones">
+        <span class="cart-line__total">₹2,499</span>
+      </li>
+      <li class="cart-line" data-price="1299">
+        <span class="cart-line__thumb" aria-hidden="true">UH</span>
+        <span>
+          <span class="cart-line__name">USB-C Hub</span><br>
+          <span class="cart-line__meta">₹1,299 each</span>
+        </span>
+        <input class="qty" type="number" min="1" value="2" aria-label="Quantity: USB-C Hub">
+        <span class="cart-line__total">₹2,598</span>
+      </li>
+    </ul>
+
+    <p class="cart-summary">Subtotal <span data-subtotal>₹5,097</span> · Shipping ₹99 · Total <strong data-grand>₹5,196</strong></p>
+  </main>
+
+  <footer class="cart-bar">
+    <span class="cart-bar__total">Order total: <strong data-grand>₹5,196</strong></span>
+    <span class="cart-bar__actions">
+      <button class="button button--secondary" type="button">Save cart for later</button>
+      <button class="button button--primary" type="button" id="cta-checkout">Proceed to checkout</button>
+    </span>
+  </footer>
+
+  <footer class="site-footer">© 2025 ShopLite — demo shop for PATCHWORK</footer>
+  <script src="/app.js"></script>
+</body>
+</html>

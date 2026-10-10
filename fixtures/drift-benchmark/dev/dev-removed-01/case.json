@@ -1,0 +1,7 @@
+{
+  "id": "dev-removed-01",
+  "category": "removed",
+  "targetBefore": ".promo-banner",
+  "expectedAfter": null,
+  "notes": "Promo banner element deleted outright; its CSS rule removed too. No component on the new page resembles it. Expected: not_found (abstain counts as correct)."
+}

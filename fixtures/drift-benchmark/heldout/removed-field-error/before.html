@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Newsletter signup — Crafters Supply</title>
+</head>
+<body>
+  <header class="site-header">
+    <a class="logo" href="/">Crafters Supply</a>
+    <nav class="site-nav">
+      <a href="/">Shop</a>
+      <a href="/cart">Cart</a>
+      <a href="/help">Help</a>
+    </nav>
+  </header>
+
+  <main class="container container--narrow">
+    <h1 class="page-title">Newsletter</h1>
+    <p class="page-subtitle">One email a month, new stock only.</p>
+
+    <form class="panel" id="newsletter-form" novalidate>
+      <div class="field">
+        <label class="field__label" for="signup-email">Email address</label>
+        <input class="field__input" id="signup-email" name="email" type="email" aria-describedby="email-error">
+        <p class="field-error" id="email-error" role="alert">Enter a valid email address</p>
+      </div>
+      <div class="field field--checkbox">
+        <input class="field__checkbox" id="consent" name="consent" type="checkbox">
+        <label class="field__label" for="consent">I agree to receive the monthly email</label>
+      </div>
+      <div class="form-actions">
+        <button class="button button--primary" id="signup-btn" type="submit">Subscribe</button>
+      </div>
+    </form>
+  </main>
+
+  <footer class="site-footer">© 2026 Crafters Supply</footer>
+</body>
+</html>

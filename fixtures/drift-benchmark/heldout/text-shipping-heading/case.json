@@ -1,0 +1,7 @@
+{
+  "id": "text-shipping-heading",
+  "category": "text",
+  "targetBefore": "#shipping-heading",
+  "expectedAfter": "#shipping-heading",
+  "notes": "Section heading; only its text changes (Shipping information -> Delivery details). Id, tag, class, parent and position are unchanged, and the sibling 'Reason' heading is a near-decoy with a different text. Expect a high-confidence match despite low text similarity."
+}

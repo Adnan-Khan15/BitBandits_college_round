@@ -1,0 +1,30 @@
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.main {
+  flex: 1;
+  min-height: 0;
+  padding: 1.5rem 2rem 3rem;
+  overflow-y: auto;
+}
+
+/* content screens read as an instrument, not a landing page: left-aligned, one column */
+.main > section {
+  max-width: 72rem;
+}
+
+/* the Studio is the website: it takes the whole remaining viewport */
+.full {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+@media (max-width: 600px) {
+  .main {
+    padding: 1rem 1rem 2rem;
+  }
+}

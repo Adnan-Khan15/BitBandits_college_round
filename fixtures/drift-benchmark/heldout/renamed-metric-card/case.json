@@ -1,0 +1,7 @@
+{
+  "id": "renamed-metric-card",
+  "category": "renamed",
+  "targetBefore": "#kpi-revenue",
+  "expectedAfter": "#revenue-card",
+  "notes": "Dashboard KPI card; both the id and the class list change (metric-card -> metricCard metric-card--v2). Text, children, tag and position are unchanged; the sibling KPI tiles keep their own classes."
+}

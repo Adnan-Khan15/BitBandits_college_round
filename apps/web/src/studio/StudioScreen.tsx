@@ -1,0 +1,1147 @@
+// apps/web/src/studio/StudioScreen.tsx (owner: Dev D)
+// The Studio: the website is the hero. Left, the real site in three views (your preview, the live
+// site, the untouched original). Right, a three-step fix panel: pick something on the page, choose
+// a fix in plain words (the preview updates as you go), prove it in a real browser, send it for review.
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { Deployment, Patch, PreviewSpec, Project, Release, VerificationRun } from '@patchwork/shared';
+import { api, isApiClientError } from '../api.js';
+import { LIVE_ORIGIN, PREVIEW_ORIGIN, TARGET_ORIGIN } from '../env.js';
+import { usePoll } from '../usePoll.js';
+import { highlightMessage, pickStartMessage, pickStopMessage, useRuntimeBridge } from '../preview/bridge.js';
+import { ErrorNotice } from '../components/Notice.js';
+import { Chip, PatchStatusChip } from '../components/StatusChip.js';
+import { useCurrentUserId } from '../user.js';
+import { useRoute } from '../router.js';
+import { nameOf, useTeam } from '../team.js';
+import { describePatchOp, firstProject } from '../screens/shared.js';
+import {
+  ATTR_CHOICES,
+  emptyForm,
+  FIX_CHOICES,
+  labelOf,
+  opsFor,
+  STYLE_PRESETS,
+  stepText,
+  suggestedChecks,
+  titleFor,
+  type FixForm,
+  type Picked,
+} from './fixes.js';
+import styles from './Studio.module.css';
+
+type Tab = 'preview' | 'live' | 'original';
+
+interface SiteState {
+  project: Project | null;
+  releases: Release[];
+  deployments: Deployment[];
+  patches: Patch[];
+}
+
+const cap = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
+
+/** Studio work in progress survives leaving the page and reloading it (per site, this browser tab). */
+interface StudioMemory {
+  previewId?: string;
+  aiPatch?: Patch | null;
+  sentPatch?: Patch | null;
+  instruction?: string;
+  aiLog?: Array<{ text: string; state: 'running' | 'done' | 'failed' }>;
+  aiChanges?: Array<{ element: string; change: string }>;
+  aiNotes?: string[];
+}
+const memKey = (pid: string) => `patchwork.studio.${pid}`;
+function readMemory(pid: string): StudioMemory {
+  try {
+    return JSON.parse(window.sessionStorage.getItem(memKey(pid)) ?? '{}') as StudioMemory;
+  } catch {
+    return {};
+  }
+}
+function writeMemory(pid: string, m: StudioMemory): void {
+  try {
+    window.sessionStorage.setItem(memKey(pid), JSON.stringify(m));
+  } catch {
+    /* storage unavailable: the Studio still works, it just forgets on reload */
+  }
+}
+
+/** Where a fix is on its way to the live site, and the next step, in plain words. */
+function WhereIsIt({ status, live, tested }: { status: Patch['status'] | null; live: boolean; tested: boolean }) {
+  let text: string;
+  let link: { href: string; label: string } | null = null;
+  if (live) text = 'This fix is live: customers see it on the live site (localhost:4100).';
+  else if (status === 'merged') {
+    text = 'Approved and merged. It reaches the live site when a release with it is deployed.';
+    link = { href: '#/ship', label: 'Ship it' };
+  } else if (status === 'in_review' || status === 'approved' || status === 'changes_requested') {
+    text = 'Waiting in Review. After a reviewer approves and merges it, the release manager ships it on Ship.';
+    link = { href: '#/review', label: 'Open Review' };
+  } else {
+    text = `${tested ? 'Tested in the Preview only. ' : ''}Not on the live site yet: send it for review, a teammate approves and merges it, then it is shipped on Ship.`;
+  }
+  return (
+    <div className={styles.where} role="status">
+      <strong>Where is this change?</strong> {text} {link ? <a href={link.href}>{link.label}</a> : null}
+    </div>
+  );
+}
+
+export function StudioScreen() {
+  const team = useTeam();
+  const userId = useCurrentUserId();
+  const segments = useRoute();
+  // #/studio/fix/<id>: show one fix from Review on top of the live site
+  const viewFixId = segments[1] === 'fix' ? (segments[2] ?? null) : null;
+
+  /* --- the site: project, live release, my fixes (polled every 2 s) ------------------- */
+  const { data: site } = usePoll<SiteState>(async () => {
+    const project = await firstProject();
+    if (!project) return { project: null, releases: [], deployments: [], patches: [] };
+    const [releases, deployments, patches] = await Promise.all([
+      api.releases(project.id),
+      api.deployments(project.id),
+      api.patches(project.id),
+    ]);
+    return { project, releases: releases.items, deployments: deployments.items, patches: patches.items };
+  }, 2000);
+  const project = site?.project ?? null;
+  const releases = site?.releases ?? [];
+  const liveRelease = releases.find((r) => r.id === project?.liveReleaseId) ?? null;
+
+  /* --- frames ---------------------------------------------------------------------------- */
+  const { data: framing } = usePoll(async () => (project ? api.framing(project.id) : null), 30000);
+  const [tab, setTab] = useState<Tab>('preview');
+  const [sideBySide, setSideBySide] = useState(false);
+  const [path, setPath] = useState('/cart');
+  const [liveKey, setLiveKey] = useState(0);
+  const [previewKey, setPreviewKey] = useState(0);
+  const [toast, setToast] = useState<{ text: string; tone: 'live' | 'back' } | null>(null);
+  const previewFrame = useRef<HTMLIFrameElement>(null);
+
+  // The live site updates by itself: when the live release changes, reload the Live view and say so.
+  const lastLive = useRef<string | null | undefined>(undefined);
+  useEffect(() => {
+    if (!project) return;
+    const now = project.liveReleaseId;
+    if (lastLive.current !== undefined && lastLive.current !== now) {
+      const newest = site?.deployments[0];
+      const r = releases.find((x) => x.id === now);
+      const label = r ? `R${r.number}` : 'no release (the original site)';
+      const back = newest?.kind === 'rollback' || newest?.kind === 'auto_rollback';
+      setToast({
+        text: back
+          ? `${newest?.kind === 'auto_rollback' ? 'Health check failed: automatically rolled back' : 'Rolled back'} to ${label}`
+          : `Live site updated to ${label}`,
+        tone: back ? 'back' : 'live',
+      });
+      setLiveKey((k) => k + 1);
+    }
+    lastLive.current = now;
+  }, [project, releases, site?.deployments]);
+  useEffect(() => {
+    if (!toast) return;
+    const t = window.setTimeout(() => setToast(null), 6000);
+    return () => window.clearTimeout(t);
+  }, [toast]);
+
+  /* --- the fix ----------------------------------------------------------------------------- */
+  const [step, setStep] = useState<1 | 2 | 3>(1);
+  const [picking, setPicking] = useState<'a1' | 'a2' | null>(null);
+  const [picked, setPicked] = useState<Picked | null>(null);
+  const [form, setForm] = useState<FixForm>(emptyForm);
+  const [title, setTitle] = useState('');
+  const [titleEdited, setTitleEdited] = useState(false);
+  const [removedChecks, setRemovedChecks] = useState<number[]>([]);
+  const [sentPatch, setSentPatch] = useState<Patch | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<unknown>(null);
+  const [run, setRun] = useState<VerificationRun | null>(null);
+
+  /* --- Ask PATCHWORK: AI drafts and tests; people ship ---------------------------------- */
+  const [instruction, setInstruction] = useState('');
+  const [aiPatch, setAiPatch] = useState<Patch | null>(null);
+  const [aiMeta, setAiMeta] = useState<{ model: string; element: string } | null>(null);
+  const [aiChanges, setAiChanges] = useState<Array<{ element: string; change: string }>>([]);
+  const [aiNotes, setAiNotes] = useState<string[]>([]);
+  const [aiLog, setAiLog] = useState<Array<{ text: string; state: 'running' | 'done' | 'failed' }>>([]);
+  const [aiError, setAiError] = useState<unknown>(null);
+  const [elapsed, setElapsed] = useState(0);
+
+  const ops = opsFor(form);
+  const checks = suggestedChecks(form).filter((_, i) => !removedChecks.includes(i));
+  const autoTitle = titleFor(form, picked);
+  const effectiveTitle = titleEdited ? title : autoTitle;
+
+  const update = (patch: Partial<FixForm>) => {
+    setForm((f) => ({ ...f, ...patch }));
+    setRemovedChecks([]);
+    setRun(null);
+  };
+
+  /* --- preview: one preview per Studio session; the draft rides on it ---------------------- */
+  const [preview, setPreview] = useState<{ id: string } | null>(null);
+
+  // restore work in progress once the site and its fixes are known; drop anything that no longer exists
+  const restored = useRef(false);
+  useEffect(() => {
+    if (restored.current || !project || !site) return;
+    restored.current = true;
+    const m = readMemory(project.id);
+    const exists = (p?: Patch | null) => (p ? (site.patches.find((x) => x.id === p.id) ?? null) : null);
+    if (m.previewId) setPreview({ id: m.previewId });
+    const ai = exists(m.aiPatch);
+    if (ai) {
+      aiPatchRef.current = ai;
+      setAiPatch(ai);
+      setAiLog(m.aiLog ?? []);
+      setAiChanges(m.aiChanges ?? []);
+      setAiNotes(m.aiNotes ?? []);
+      setInstruction(m.instruction ?? '');
+    }
+    const sent = exists(m.sentPatch);
+    if (sent) setSentPatch(sent);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [project?.id, site]);
+  useEffect(() => {
+    if (!project || !restored.current) return;
+    writeMemory(project.id, {
+      previewId: preview?.id,
+      aiPatch,
+      sentPatch,
+      instruction,
+      aiLog: aiLog.filter((l) => l.state !== 'running'),
+      aiChanges,
+      aiNotes,
+    });
+  }, [project, preview, aiPatch, sentPatch, instruction, aiLog, aiChanges, aiNotes]);
+  const spec: PreviewSpec | null = useMemo(() => {
+    if (aiPatch) return { base: 'live', include: [aiPatch.id], exclude: [], draft: null, resolverMode: 'smart' };
+    if (viewFixId && !picked) return { base: 'live', include: [viewFixId], exclude: [], draft: null, resolverMode: 'smart' };
+    if (sentPatch) return { base: 'live', include: [sentPatch.id], exclude: [], draft: null, resolverMode: 'smart' };
+    const anchors: Record<string, Picked['fingerprint']> = {};
+    if (picked) anchors.a1 = picked.fingerprint;
+    if (form.kind === 'move' && form.moveRef) anchors.a2 = form.moveRef.fingerprint;
+    const draft =
+      picked && ops
+        ? {
+            title: effectiveTitle || 'Untitled fix',
+            urlPath: picked.path,
+            anchors,
+            ops,
+            checks,
+            baseSnapshotId: null,
+            baseValues: (form.kind === 'text' ? { 0: picked.current.text } : {}) as Record<number, string | null>,
+          }
+        : null;
+    return { base: 'live', include: [], exclude: [], draft, resolverMode: 'smart' };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [JSON.stringify([picked?.fingerprint, form, effectiveTitle, removedChecks, sentPatch?.id, sentPatch?.revision, viewFixId, aiPatch?.id, aiPatch?.revision])]);
+
+  const specJson = JSON.stringify(spec);
+  const lastSpec = useRef<string>('');
+  useEffect(() => {
+    if (!project || !spec) return;
+    if (specJson === lastSpec.current) return;
+    const handle = window.setTimeout(async () => {
+      try {
+        if (!preview) {
+          const res = await api.createPreview(project.id, spec);
+          setPreview({ id: res.preview.id });
+        } else {
+          await api.updatePreview(preview.id, spec);
+          setPreviewKey((k) => k + 1); // every change shows up in the preview straight away
+        }
+        lastSpec.current = specJson;
+        setError(null);
+      } catch (err) {
+        // a preview from an earlier session (expired, or the data was reset): open a fresh one
+        if (isApiClientError(err) && err.code === 'NOT_FOUND' && preview) setPreview(null);
+        else setError(err);
+      }
+    }, 350);
+    return () => window.clearTimeout(handle);
+  }, [project, preview, spec, specJson]);
+
+  // a site without /cart opens on its first tracked page
+  useEffect(() => {
+    if (project && !project.paths.includes(path)) setPath(project.paths.includes('/cart') ? '/cart' : (project.paths[0] ?? '/'));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [project?.id]);
+
+  // opening a fix from Review jumps to the page it changes
+  const fixPath = viewFixId ? (site?.patches ?? []).find((p) => p.id === viewFixId)?.urlPath ?? null : null;
+  useEffect(() => {
+    if (fixPath && !fixPath.endsWith('/*')) setPath(fixPath);
+  }, [fixPath]);
+
+  const previewSrc = preview
+    ? `${PREVIEW_ORIGIN}/__patchwork/preview/${preview.id}?path=${encodeURIComponent(path)}&editor=1&k=${previewKey}`
+    : null;
+
+  /* --- picking through the runtime bridge ------------------------------------------------- */
+  const { send } = useRuntimeBridge({
+    previewOrigin: PREVIEW_ORIGIN,
+    onReady: (_status, framePath) => {
+      if (framePath !== path) setPath(framePath);
+      // after every preview reload, outline the picked element again
+      if (picked && framePath === picked.path) send(highlightMessage(picked.fingerprint), previewFrame.current);
+    },
+    onPicked: (fingerprint, elementPath, current) => {
+      const p: Picked = { fingerprint, elementPath, current, path };
+      if (picking === 'a2') {
+        update({ moveRef: p });
+      } else {
+        setPicked(p);
+        setForm(emptyForm());
+        setRemovedChecks([]);
+        setTitleEdited(false);
+        setSentPatch(null);
+        setRun(null);
+        setStep(2);
+      }
+      setPicking(null);
+      send(highlightMessage(fingerprint), previewFrame.current);
+    },
+  });
+
+  const startPick = (which: 'a1' | 'a2') => {
+    setTab('preview');
+    setSideBySide(false);
+    setPicking(which);
+    window.setTimeout(() => send(pickStartMessage(), previewFrame.current), 50);
+  };
+  const stopPick = () => {
+    setPicking(null);
+    send(pickStopMessage(), previewFrame.current);
+  };
+
+  const reset = () => {
+    setAiPatch(null);
+    setAiMeta(null);
+    setAiChanges([]);
+    setAiNotes([]);
+    setAiLog([]);
+    setAiError(null);
+    setPicked(null);
+    setForm(emptyForm());
+    setTitle('');
+    setTitleEdited(false);
+    setRemovedChecks([]);
+    setSentPatch(null);
+    setRun(null);
+    setError(null);
+    setStep(1);
+    send(highlightMessage(null), previewFrame.current);
+  };
+
+  /** Draft -> test in a real browser -> (if it fails) one revision -> re-test. Never submits. */
+  const askPatchwork = async () => {
+    if (!project || !preview || instruction.trim().length < 3) return;
+    reset();
+    setBusy('ai');
+    const log: Array<{ text: string; state: 'running' | 'done' | 'failed' }> = [];
+    const push = (text: string, state: 'running' | 'done' | 'failed' = 'running') => {
+      log.push({ text, state });
+      setAiLog([...log]);
+    };
+    const finish = (state: 'done' | 'failed', text?: string) => {
+      const last = log[log.length - 1];
+      if (last) log[log.length - 1] = { text: text ?? last.text, state };
+      setAiLog([...log]);
+    };
+    const started = Date.now();
+    const ticker = window.setInterval(() => setElapsed(Math.round((Date.now() - started) / 1000)), 500);
+    const showInPreview = async (patchId: string) => {
+      const s: PreviewSpec = { base: 'live', include: [patchId], exclude: [], draft: null, resolverMode: 'smart' };
+      await api.updatePreview(preview.id, s);
+      lastSpec.current = JSON.stringify(s);
+      setPreviewKey((k) => k + 1);
+    };
+    const test = async (): Promise<VerificationRun> => {
+      let r = await api.runVerification(project.id, { kind: 'preview', previewId: preview.id });
+      while (r.status === 'queued' || r.status === 'running') {
+        await new Promise((ok) => setTimeout(ok, 1000));
+        r = await api.verification(r.id);
+      }
+      setRun(r);
+      return r;
+    };
+    const failureOf = (r: VerificationRun): string => {
+      const step = r.steps.find((s) => !s.ok && s.patchId === aiPatchRef.current?.id) ?? r.steps.find((s) => !s.ok);
+      if (step) return `${stepText(step.step)} failed: ${step.error ?? 'no detail'}`;
+      const notApplied = r.patchApplication.find((p) => !p.applied && p.reason !== 'path_mismatch');
+      if (notApplied) return `the fix could not be applied (${notApplied.reason.replace(/_/g, ' ')})`;
+      if (r.newConsoleErrors.length) {
+        // a page error after the click means the site's own handler still ran: the click was not replaced
+        const ranOwn = r.steps.some((s) => s.step.action === 'click' && s.ok);
+        const err = r.newConsoleErrors[0] ?? '';
+        if (/404|not found/i.test(err)) return `a new error appeared after the change: something the page asked for does not exist (${err})`;
+        return ranOwn
+          ? `after the click a new error appeared in the page (${err}): the site's own click handler may still be running`
+          : `a new error appeared in the page: ${err}`;
+      }
+      return r.summary;
+    };
+    try {
+      push(`Drafting with the local model…`);
+      const d = await api.assistDraft(project.id, { path, instruction: instruction.trim(), pickedElementPath: picked?.elementPath ?? null });
+      aiPatchRef.current = d.patch;
+      setAiPatch(d.patch);
+      setAiMeta({ model: d.model, element: 'the element' });
+      setAiChanges(d.changes);
+      setAiNotes(d.notes);
+      finish('done', `Drafted “${d.summary}”: ${d.changes.length} change${d.changes.length === 1 ? '' : 's'} (${d.model}, ${(d.latencyMs / 1000).toFixed(1)} s)`);
+      await showInPreview(d.patch.id);
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        push('Testing in a real browser…');
+        const r = await test();
+        if (r.status === 'passed') {
+          finish('done', 'Passed in a real browser ✓');
+          break;
+        }
+        const why = failureOf(r);
+        const mineId = aiPatchRef.current?.id;
+        const ownFailed =
+          r.steps.some((s) => !s.ok && s.patchId === mineId) ||
+          r.patchApplication.some((p) => p.patchId === mineId && !p.applied && p.reason !== 'path_mismatch') ||
+          r.status === 'error';
+        if (!ownFailed && r.newConsoleErrors.length === 0) {
+          // the AI's own changes passed; what failed belongs to another fix, so revising cannot help
+          finish('failed', `Your changes pass, but another live fix's check failed: ${why}. A reviewer decides in Review.`);
+          break;
+        }
+        finish('failed', `Failed: ${why}`);
+        if (attempt === 2) {
+          push('Two attempts used. Over to you: fix it manually or send it as is for review.', 'failed');
+          break;
+        }
+        push('Revising with the test result…');
+        const rv = await api.assistRevise(aiPatchRef.current!.id, { instruction: instruction.trim(), failure: why });
+        aiPatchRef.current = rv.patch;
+        setAiPatch(rv.patch);
+        setAiMeta({ model: rv.model, element: 'the element' });
+        setAiChanges(rv.changes);
+        setAiNotes(rv.notes);
+        finish('done', `Revised: “${rv.summary}” (${(rv.latencyMs / 1000).toFixed(1)} s)`);
+        await showInPreview(rv.patch.id);
+      }
+      setStep(3);
+    } catch (err) {
+      finish('failed');
+      setAiError(err);
+    } finally {
+      window.clearInterval(ticker);
+      setBusy(null);
+    }
+  };
+  const aiPatchRef = useRef<Patch | null>(null);
+
+  const sendAiForReview = async () => {
+    if (!aiPatch) return;
+    setBusy('send');
+    setError(null);
+    try {
+      setSentPatch(await api.submitPatch(aiPatch.id));
+    } catch (err) {
+      setError(err);
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  /* --- prove: a real browser run of this preview ------------------------------------------ */
+  const testNow = async () => {
+    if (!project || !preview) return;
+    setBusy('test');
+    setError(null);
+    try {
+      let r = await api.runVerification(project.id, { kind: 'preview', previewId: preview.id });
+      setRun(r);
+      while (r.status === 'queued' || r.status === 'running') {
+        await new Promise((ok) => setTimeout(ok, 1200));
+        r = await api.verification(r.id);
+        setRun(r);
+      }
+    } catch (err) {
+      setError(err);
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const sendForReview = async () => {
+    if (!project || !picked || !ops) return;
+    setBusy('send');
+    setError(null);
+    try {
+      const anchors: Record<string, Picked['fingerprint']> = { a1: picked.fingerprint };
+      if (form.kind === 'move' && form.moveRef) anchors.a2 = form.moveRef.fingerprint;
+      const created = await api.createPatch(project.id, {
+        title: effectiveTitle,
+        description: `Fixed in the Studio on ${picked.path}.`,
+        urlPath: picked.path,
+        anchors,
+        ops,
+        checks,
+        baseSnapshotId: null,
+        baseValues: form.kind === 'text' ? { 0: picked.current.text } : {},
+      });
+      const submitted = await api.submitPatch(created.id);
+      setSentPatch(submitted);
+    } catch (err) {
+      setError(err);
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  /* --- render ------------------------------------------------------------------------------ */
+  const paths = project?.paths ?? ['/', '/cart', '/checkout'];
+  const myFixes = (site?.patches ?? []).filter((p) => p.authorId === userId);
+  const liveIds = new Set(liveRelease?.patches.map((p) => p.patchId) ?? []);
+
+  const frameFor = (which: Tab) => {
+    if (which === 'original' && framing && !framing.framable && project) {
+      return (
+        <div className={styles.frameEmpty}>
+          <p>
+            {project.name}'s own server doesn't allow other pages to embed it, so its original can't be shown here.{' '}
+            <a href={`${project.upstreamOrigin}${path}`} target="_blank" rel="noreferrer">
+              Open the original in a new tab
+            </a>
+            . The Preview and Live tabs work because PATCHWORK serves them.
+          </p>
+        </div>
+      );
+    }
+    if (which === 'preview') {
+      return previewSrc ? (
+        <iframe
+          key={`p-${previewKey}-${preview?.id}`}
+          ref={previewFrame}
+          className={styles.frame}
+          title="Preview: your fix, not shipped"
+          src={previewSrc}
+        />
+      ) : (
+        <div className={styles.frameEmpty}>Opening the preview…</div>
+      );
+    }
+    const origin = which === 'live' ? LIVE_ORIGIN : (project?.upstreamOrigin ?? TARGET_ORIGIN);
+    return (
+      <iframe
+        key={`${which}-${liveKey}-${path}`}
+        className={styles.frame}
+        title={which === 'live' ? 'Live site: what customers see' : 'Original site: untouched'}
+        src={`${origin}${path}`}
+      />
+    );
+  };
+
+  const viewedFix = viewFixId ? (site?.patches ?? []).find((p) => p.id === viewFixId) ?? null : null;
+  const caption: Record<Tab, string> = {
+    preview: viewedFix && !picked
+      ? `The live site plus “${viewedFix.title}”, the fix under review. Customers don't see it yet.`
+      : picked ? 'Your fix, not shipped yet. Only you see this.' : 'The live site plus your unshipped fix. Only you see this.',
+    live: `What customers see at ${LIVE_ORIGIN}: ${liveRelease ? `release R${liveRelease.number}` : 'no release yet, the original site'}. A fix appears here only after Review and Ship.`,
+    original: `${project?.name ?? 'The site'}'s own server, ${project?.upstreamOrigin ?? ''}. It never changes: PATCHWORK leaves its code alone.`,
+  };
+
+  return (
+    <div className={styles.studio}>
+      {/* ---------------- website ---------------- */}
+      <section className={styles.site} aria-label="The website">
+        <div className={styles.siteBar}>
+          <div className={styles.tabs} role="tablist" aria-label="Which version of the site">
+            {(['preview', 'live', 'original'] as Tab[]).map((t) => (
+              <button
+                key={t}
+                role="tab"
+                type="button"
+                aria-selected={!sideBySide && tab === t}
+                className={`${styles.tab} ${styles[`tab_${t}`]}`}
+                onClick={() => {
+                  setTab(t);
+                  setSideBySide(false);
+                }}
+              >
+                <span className={styles.dot} aria-hidden="true" />
+                {t === 'preview' ? 'Preview' : t === 'live' ? 'Live site' : 'Original'}
+              </button>
+            ))}
+            <button
+              type="button"
+              className={styles.tab}
+              aria-pressed={sideBySide}
+              onClick={() => setSideBySide((s) => !s)}
+            >
+              Original vs live
+            </button>
+          </div>
+          <div className={styles.pathBar}>
+            {paths.map((p) => (
+              <button
+                key={p}
+                type="button"
+                className={styles.pathBtn}
+                aria-pressed={path === p}
+                onClick={() => setPath(p)}
+              >
+                {p}
+              </button>
+            ))}
+            <button
+              type="button"
+              className={styles.pathBtn}
+              onClick={() => {
+                setLiveKey((k) => k + 1);
+                setPreviewKey((k) => k + 1);
+              }}
+              aria-label="Reload the site"
+              title="Reload"
+            >
+              ↻
+            </button>
+          </div>
+        </div>
+
+        <p className={styles.caption}>
+          {sideBySide ? 'Left: the untouched original. Right: what customers see through PATCHWORK.' : caption[tab]}
+        </p>
+
+        <div className={sideBySide ? styles.framesPair : styles.frames}>
+          {sideBySide ? (
+            <>
+              {frameFor('original')}
+              {frameFor('live')}
+            </>
+          ) : (
+            <>
+              {/* the preview frame stays mounted so picking and live updates never lose it */}
+              <div className={styles.frameSlot} hidden={tab !== 'preview'}>
+                {frameFor('preview')}
+              </div>
+              {tab !== 'preview' ? frameFor(tab) : null}
+            </>
+          )}
+        </div>
+
+        {toast ? (
+          <div className={`${styles.toast} ${toast.tone === 'back' ? styles.toastBack : ''}`} role="status">
+            <span aria-hidden="true">{toast.tone === 'back' ? '↩' : '●'}</span> {toast.text}
+          </div>
+        ) : null}
+      </section>
+
+      {/* ---------------- fix panel ---------------- */}
+      <aside className={styles.panel} aria-label="Fix it">
+        <form
+          className={styles.ask}
+          onSubmit={(e) => {
+            e.preventDefault();
+            void askPatchwork();
+          }}
+        >
+          <label htmlFor="ask-input" className={styles.askLabel}>
+            Ask PATCHWORK
+          </label>
+          <div className={styles.askRow}>
+            <input
+              id="ask-input"
+              value={instruction}
+              onChange={(e) => setInstruction(e.target.value)}
+              placeholder="e.g. make the checkout button take people to checkout…"
+              name="ask"
+              autoComplete="off"
+            />
+            <button type="submit" className="btn btn--patch" disabled={busy !== null || !preview || instruction.trim().length < 3}>
+              {busy === 'ai' ? `Thinking… ${elapsed} s` : 'Draft it'}
+            </button>
+          </div>
+          <span className="muted">A local model drafts and tests the fix on {path}{picked ? `, around ${labelOf(picked)}` : ''}. People review and ship it.</span>
+        </form>
+
+        <ol className={styles.steps}>
+          {(['Pick', 'Fix', 'Prove'] as const).map((label, i) => (
+            <li key={label}>
+              <button
+                type="button"
+                className={styles.stepBtn}
+                aria-current={step === i + 1 ? 'step' : undefined}
+                disabled={i > 0 && !picked}
+                onClick={() => setStep((i + 1) as 1 | 2 | 3)}
+              >
+                <span className={`${styles.stepNum} num`}>{i + 1}</span> {label}
+              </button>
+            </li>
+          ))}
+        </ol>
+
+        {aiLog.length > 0 || aiPatch || aiError ? (
+          <div className={styles.stepBody}>
+            <div className={styles.aiBadge}>AI draft — review before sending</div>
+            <ol className={styles.aiLog} aria-live="polite">
+              {aiLog.map((l, i) => (
+                <li key={i} className={styles[`ai_${l.state}`]}>
+                  <span aria-hidden="true">{l.state === 'done' ? '✓' : l.state === 'failed' ? '✕' : '◔'}</span> {l.text}
+                  {l.state === 'running' && busy === 'ai' ? <span className="muted"> {elapsed} s</span> : null}
+                </li>
+              ))}
+            </ol>
+            {aiPatch ? (
+              <>
+                <h2>{aiPatch.title}</h2>
+                <ul className={styles.checks}>
+                  {(aiChanges.length > 0
+                    ? aiChanges.map((c) => `${c.element}: ${c.change}`)
+                    : aiPatch.ops.map((op) => describePatchOp(op, aiPatch.anchors))
+                  ).map((line, i) => (
+                    <li key={i}>{line}</li>
+                  ))}
+                </ul>
+                <p className="muted">
+                  A real browser checks {aiPatch.checks.length} thing{aiPatch.checks.length === 1 ? '' : 's'} on the page:{' '}
+                  {aiPatch.checks.map((c) => stepText(c).replace(/anchor:a\d+/g, 'the element')).join('; ')}.
+                </p>
+                {aiNotes.map((n, i) => (
+                  <p key={i} className={styles.note}>
+                    {n}
+                  </p>
+                ))}
+                <WhereIsIt
+                  status={(site?.patches ?? []).find((p) => p.id === aiPatch.id)?.status ?? aiPatch.status}
+                  live={liveIds.has(aiPatch.id)}
+                  tested={aiLog.some((l) => l.text.startsWith('Passed'))}
+                />
+              </>
+            ) : null}
+            {aiError ? <PlainError error={aiError} /> : null}
+            {error ? <PlainError error={error} /> : null}
+            <div className={styles.footer}>
+              {sentPatch ? (
+                <span className={styles.sent}>
+                  <PatchStatusChip status={sentPatch.status} /> Sent. A reviewer picks it up in Review.
+                </span>
+              ) : (
+                <button type="button" className="btn" disabled={busy !== null} onClick={reset}>
+                  Fix it manually
+                </button>
+              )}
+              {sentPatch ? (
+                <button type="button" className="btn" onClick={reset}>
+                  Fix something else
+                </button>
+              ) : (
+                <button type="button" className="btn btn--patch" disabled={busy !== null || !aiPatch} onClick={() => void sendAiForReview()}>
+                  {busy === 'send' ? 'Sending…' : 'Send for review'}
+                </button>
+              )}
+            </div>
+          </div>
+        ) : null}
+
+        {viewedFix && !picked && aiLog.length === 0 && !aiPatch && !aiError ? (
+          <div className={styles.stepBody}>
+            <div className={styles.pickedChip}>
+              <span>Showing in the Preview</span>
+              <a className={styles.linkBtn} href="#/studio">
+                Close
+              </a>
+            </div>
+            <h2>{viewedFix.title}</h2>
+            <div>
+              {liveIds.has(viewedFix.id) ? <Chip tone="healthy" glyph="●">live</Chip> : <PatchStatusChip status={viewedFix.status} />}{' '}
+              <span className="muted">by {nameOf(team, viewedFix.authorId)} on {viewedFix.urlPath}</span>
+            </div>
+            <ul className={styles.checks}>
+              {viewedFix.ops.map((op, i) => (
+                <li key={i}>{describePatchOp(op, viewedFix.anchors)}</li>
+              ))}
+            </ul>
+            <WhereIsIt status={viewedFix.status} live={liveIds.has(viewedFix.id)} tested={false} />
+            {error ? <PlainError error={error} /> : null}
+            {viewedFix.status === 'draft' || viewedFix.status === 'changes_requested' ? (
+              <div className={styles.footer}>
+                <span className="muted">
+                  {viewedFix.authorId === userId ? 'Your draft.' : `${nameOf(team, viewedFix.authorId)}'s draft.`}
+                </span>
+                <button
+                  type="button"
+                  className="btn btn--patch"
+                  disabled={busy !== null}
+                  onClick={async () => {
+                    setBusy('send');
+                    setError(null);
+                    try {
+                      await api.submitPatch(viewedFix.id);
+                    } catch (err) {
+                      setError(err);
+                    } finally {
+                      setBusy(null);
+                    }
+                  }}
+                >
+                  {busy === 'send' ? 'Sending…' : 'Send for review'}
+                </button>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+
+        {step === 1 && aiLog.length === 0 && !aiPatch && !aiError && !viewedFix ? (
+          <div className={styles.stepBody}>
+            <h2>Pick what is broken</h2>
+            <p className={styles.lede}>
+              Click the element on the website itself. Nothing on the real site changes until a teammate reviews
+              and ships your fix.
+            </p>
+            {picking === 'a1' ? (
+              <button type="button" className="btn btn--big" onClick={stopPick}>
+                Cancel picking
+              </button>
+            ) : (
+              <button type="button" className="btn btn--patch btn--big" onClick={() => startPick('a1')} disabled={!preview}>
+                Pick something on the page
+              </button>
+            )}
+            {picking ? <p className={styles.hint}>Now click an element in the preview.</p> : null}
+            {picked ? (
+              <div className={styles.pickedChip}>
+                <span className={styles.tagBadge}>{picked.fingerprint.tag}</span>
+                <span>{labelOf(picked)}</span>
+                <span className="muted">on {picked.path}</span>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+
+        {step === 2 && picked && !aiPatch && aiLog.length === 0 ? (
+          <div className={styles.stepBody}>
+            <div className={styles.pickedChip}>
+              <span className={styles.tagBadge}>{picked.fingerprint.tag}</span>
+              <span>{labelOf(picked)}</span>
+              <button type="button" className={styles.linkBtn} onClick={() => startPick('a1')}>
+                Pick again
+              </button>
+            </div>
+            <h2>What should it do instead?</h2>
+            <div className={styles.choices} role="radiogroup" aria-label="Kind of fix">
+              {FIX_CHOICES.map((c) => (
+                <button
+                  key={c.kind}
+                  type="button"
+                  role="radio"
+                  aria-checked={form.kind === c.kind}
+                  className={styles.choice}
+                  onClick={() => update({ kind: c.kind, text: c.kind === 'text' && !form.text ? picked.current.text : form.text })}
+                >
+                  <strong>{c.label}</strong>
+                  <span>{c.hint}</span>
+                </button>
+              ))}
+            </div>
+
+            <FixFields form={form} update={update} picked={picked} startPickRef={() => startPick('a2')} picking={picking} />
+
+            {ops ? (
+              <label className={styles.field}>
+                Name of this fix
+                <input
+                  value={effectiveTitle}
+                  onChange={(e) => {
+                    setTitle(e.target.value);
+                    setTitleEdited(true);
+                  }}
+                  name="fix-title"
+                  autoComplete="off"
+                />
+              </label>
+            ) : null}
+            {error ? <PlainError error={error} /> : null}
+            <div className={styles.footer}>
+              <span className="muted">{ops ? 'The preview on the left already shows this fix.' : 'Choose a fix to see it in the preview.'}</span>
+              <button type="button" className="btn btn--primary" disabled={!ops} onClick={() => setStep(3)}>
+                Next: prove it works
+              </button>
+            </div>
+          </div>
+        ) : null}
+
+        {step === 3 && picked && !aiPatch && aiLog.length === 0 ? (
+          <div className={styles.stepBody}>
+            <h2>Prove it works</h2>
+            <p className={styles.lede}>A real browser will open the preview and check these things.</p>
+            {suggestedChecks(form).length === 0 ? (
+              <p className={styles.hint}>This kind of fix has no automatic check. The browser test still confirms it applies cleanly.</p>
+            ) : (
+              <ul className={styles.checks}>
+                {suggestedChecks(form).map((c, i) => {
+                  const off = removedChecks.includes(i);
+                  return (
+                    <li key={i} className={off ? styles.checkOff : undefined}>
+                      <span>{cap(stepText(c))}</span>
+                      <button
+                        type="button"
+                        className={styles.linkBtn}
+                        onClick={() => setRemovedChecks((r) => (off ? r.filter((x) => x !== i) : [...r, i]))}
+                      >
+                        {off ? 'Use' : 'Skip'}
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+            <button type="button" className="btn btn--big" disabled={busy !== null || !ops} onClick={() => void testNow()}>
+              {busy === 'test' ? 'Testing in a real browser…' : 'Test it now'}
+            </button>
+            {run ? <RunResult run={run} /> : null}
+            {run || sentPatch ? (
+              <WhereIsIt
+                status={sentPatch ? ((site?.patches ?? []).find((p) => p.id === sentPatch.id)?.status ?? sentPatch.status) : null}
+                live={sentPatch ? liveIds.has(sentPatch.id) : false}
+                tested={run?.status === 'passed'}
+              />
+            ) : null}
+
+            {error ? <PlainError error={error} /> : null}
+            <div className={styles.footer}>
+              {sentPatch ? (
+                <span className={styles.sent}>
+                  <PatchStatusChip status={sentPatch.status} /> Sent. A reviewer picks it up in Review.
+                </span>
+              ) : (
+                <span className="muted">{effectiveTitle}</span>
+              )}
+              {sentPatch ? (
+                <button type="button" className="btn" onClick={reset}>
+                  Fix something else
+                </button>
+              ) : (
+                <button type="button" className="btn btn--patch" disabled={busy !== null || !ops} onClick={() => void sendForReview()}>
+                  {busy === 'send' ? 'Sending…' : 'Send for review'}
+                </button>
+              )}
+            </div>
+          </div>
+        ) : null}
+
+        <div className={styles.myFixes}>
+          <h3>Your fixes</h3>
+          {myFixes.length === 0 ? (
+            <p className="muted">No fixes yet. Pick something on the page to start.</p>
+          ) : (
+            <ul>
+              {myFixes.slice(0, 6).map((p) => (
+                <li key={p.id}>
+                  <a className={styles.fixTitle} href={`#/studio/fix/${p.id}`} title="Show this fix in the Preview">
+                    {p.title}
+                  </a>
+                  {liveIds.has(p.id) ? (
+                    <Chip tone="healthy" glyph="●">live</Chip>
+                  ) : (
+                    <PatchStatusChip status={p.status} />
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+          <p className="muted">Acting as {nameOf(team, userId)}.</p>
+        </div>
+      </aside>
+    </div>
+  );
+}
+
+function FixFields({
+  form,
+  update,
+  picked,
+  startPickRef,
+  picking,
+}: {
+  form: FixForm;
+  update: (p: Partial<FixForm>) => void;
+  picked: Picked;
+  startPickRef: () => void;
+  picking: 'a1' | 'a2' | null;
+}) {
+  switch (form.kind) {
+    case 'text':
+      return (
+        <label className={styles.field}>
+          New text
+          <input value={form.text} onChange={(e) => update({ text: e.target.value })} name="fix-text" autoComplete="off" />
+          <span className="muted">Was: “{picked.current.text}”</span>
+        </label>
+      );
+    case 'style':
+      return (
+        <div className={styles.fieldRow}>
+          <label className={styles.field}>
+            What to change
+            <select value={form.styleProperty} onChange={(e) => update({ styleProperty: e.target.value as FixForm['styleProperty'] })}>
+              {STYLE_PRESETS.map((s) => (
+                <option key={s.property} value={s.property}>
+                  {s.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className={styles.field}>
+            New value
+            <input
+              value={form.styleValue}
+              onChange={(e) => update({ styleValue: e.target.value })}
+              placeholder={`e.g. ${STYLE_PRESETS.find((s) => s.property === form.styleProperty)?.placeholder ?? ''}…`}
+              name="fix-style"
+              autoComplete="off"
+            />
+          </label>
+        </div>
+      );
+    case 'attr':
+      return (
+        <div className={styles.fieldRow}>
+          <label className={styles.field}>
+            Attribute
+            <select value={form.attrName} onChange={(e) => update({ attrName: e.target.value as FixForm['attrName'] })}>
+              {ATTR_CHOICES.map((a) => (
+                <option key={a} value={a}>
+                  {a === 'href' ? 'Link address (href)' : a}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className={styles.field}>
+            New value
+            <input
+              value={form.attrValue}
+              disabled={form.attrRemove}
+              onChange={(e) => update({ attrValue: e.target.value })}
+              placeholder={picked.current.attrs[form.attrName] ?? 'e.g. /checkout…'}
+              name="fix-attr"
+              autoComplete="off"
+            />
+          </label>
+          <label className={styles.inline}>
+            <input type="checkbox" checked={form.attrRemove} onChange={(e) => update({ attrRemove: e.target.checked })} /> Remove it instead
+          </label>
+        </div>
+      );
+    case 'click':
+      return (
+        <div className={styles.fieldRow}>
+          <label className={styles.field}>
+            When someone clicks it
+            <select value={form.clickAction} onChange={(e) => update({ clickAction: e.target.value as FixForm['clickAction'] })}>
+              <option value="navigate">Go to a page</option>
+              <option value="block">Do nothing (stop the broken click)</option>
+            </select>
+          </label>
+          {form.clickAction === 'navigate' ? (
+            <label className={styles.field}>
+              Page
+              <input value={form.clickUrl} onChange={(e) => update({ clickUrl: e.target.value })} placeholder="e.g. /checkout…" name="fix-url" autoComplete="off" />
+            </label>
+          ) : null}
+        </div>
+      );
+    case 'move':
+      return (
+        <div className={styles.fieldRow}>
+          <label className={styles.field}>
+            Put it
+            <select value={form.movePosition} onChange={(e) => update({ movePosition: e.target.value as FixForm['movePosition'] })}>
+              <option value="before">before</option>
+              <option value="after">after</option>
+              <option value="prepend">inside, at the start of</option>
+              <option value="append">inside, at the end of</option>
+            </select>
+          </label>
+          <div className={styles.field}>
+            Which element
+            {form.moveRef ? <span>{labelOf(form.moveRef)}</span> : null}
+            <button type="button" className="btn" onClick={startPickRef}>
+              {picking === 'a2' ? 'Click it in the preview…' : form.moveRef ? 'Pick a different one' : 'Pick the other element'}
+            </button>
+          </div>
+        </div>
+      );
+    case 'insert':
+      return (
+        <div className={styles.fieldRow}>
+          <label className={styles.field}>
+            Message
+            <input value={form.insertText} onChange={(e) => update({ insertText: e.target.value })} placeholder="e.g. Free delivery this week…" name="fix-note" autoComplete="off" />
+          </label>
+          <label className={styles.field}>
+            Where
+            <select value={form.insertPosition} onChange={(e) => update({ insertPosition: e.target.value as FixForm['insertPosition'] })}>
+              <option value="beforebegin">Above it</option>
+              <option value="afterend">Below it</option>
+              <option value="afterbegin">Inside, at the start</option>
+              <option value="beforeend">Inside, at the end</option>
+            </select>
+          </label>
+        </div>
+      );
+    default:
+      return null;
+  }
+}
+
+function RunResult({ run }: { run: VerificationRun }) {
+  const done = run.status !== 'queued' && run.status !== 'running';
+  const passed = run.status === 'passed';
+  // this fix's own checks in words; checks of fixes already live are summarised in one line
+  const own = run.steps.filter((s) => s.patchId === 'draft');
+  const others = run.steps.filter((s) => s.patchId !== 'draft');
+  const othersFailed = others.filter((s) => !s.ok).length;
+  return (
+    <div className={`${styles.run} ${done ? (passed ? styles.runPass : styles.runFail) : ''}`} aria-live="polite">
+      <strong>
+        {!done ? 'Opening a real browser…' : passed ? '✓ Works in a real browser' : '✕ The browser test found a problem'}
+      </strong>
+      {own.length > 0 || others.length > 0 ? (
+        <ul>
+          {own.map((s, i) => (
+            <li key={i}>
+              {s.ok ? '✓' : '✕'} {cap(stepText(s.step))}
+              {s.error ? <span className="muted"> {s.error}</span> : null}
+            </li>
+          ))}
+          {others.length > 0 ? (
+            <li className="muted">
+              {othersFailed === 0 ? '✓' : '✕'} {others.length - othersFailed} of {others.length} checks of fixes already live
+              still pass with yours added
+            </li>
+          ) : null}
+        </ul>
+      ) : null}
+      {done && run.newConsoleErrors.length > 0 ? (
+        <p className="muted">New errors in the page: {run.newConsoleErrors.join('; ')}</p>
+      ) : null}
+      {done && run.status === 'error' ? <p className="muted">{run.summary}</p> : null}
+    </div>
+  );
+}
+
+/** Validation errors in plain words, next to the action that caused them. */
+function PlainError({ error }: { error: unknown }) {
+  if (isApiClientError(error) && error.code === 'VALIDATION_FAILED' && Array.isArray(error.details)) {
+    const issues = error.details as Array<{ message: string }>;
+    return (
+      <div className={styles.error} role="alert">
+        This fix can't be saved yet:
+        <ul>
+          {issues.map((i, n) => (
+            <li key={n}>{i.message}</li>
+          ))}
+        </ul>
+      </div>
+    );
+  }
+  return <ErrorNotice error={error} />;
+}

@@ -1,0 +1,7 @@
+{
+  "id": "dev-ren-both-01",
+  "category": "renamed",
+  "targetBefore": "#apply-coupon",
+  "expectedAfter": "#coupon-submit",
+  "notes": "id and both classes renamed in one mutation (apply-coupon/btn btn-outline -> coupon-submit/button button--ghost). CSS updated for the new classes; markup unchanged otherwise. Expected: relocated on text, accessible name and neighbours."
+}

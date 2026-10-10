@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Checkout — ShopLite</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <header class="site-header">
+    <a class="logo" href="/">ShopLite</a>
+    <nav class="site-nav">
+      <a href="/">Home</a>
+      <a href="/checkout">Checkout</a>
+      <a href="/cart">Cart</a>
+    </nav>
+  </header>
+
+  <main class="container">
+    <h1 class="page-title">Checkout</h1>
+    <p class="tagline">Order total: ₹5,196</p>
+
+    <form id="checkout-form" class="panel" novalidate>
+      <h2 style="margin-top:0;font-size:17px;">Delivery details</h2>
+      <div class="form-grid">
+        <div class="field">
+          <label for="full-name">Full name</label>
+          <input id="full-name" name="fullName" type="text" autocomplete="name" required>
+        </div>
+        <div class="field">
+          <label for="email">Email</label>
+          <input id="email" name="email" type="email" autocomplete="email" required>
+        </div>
+        <div class="field field--full">
+          <label for="address">Address</label>
+          <textarea id="address" name="address" rows="3" autocomplete="street-address" required></textarea>
+        </div>
+        <div class="field">
+          <label for="city">City</label>
+          <input id="city" name="city" type="text" autocomplete="address-level2" required>
+        </div>
+        <div class="field">
+          <label for="pincode">PIN code</label>
+          <input id="pincode" name="pincode" type="text" inputmode="numeric" autocomplete="postal-code" required>
+        </div>
+      </div>
+      <button class="btn btn-primary" type="submit" id="place-order-btn">Place order</button>
+    </form>
+  </main>
+
+  <footer class="site-footer">© 2025 ShopLite — demo shop for PATCHWORK</footer>
+  <script src="/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,7 @@
+{
+  "id": "dev-wrapped-01",
+  "category": "wrapped",
+  "targetBefore": ".price",
+  "expectedAfter": ".price",
+  "notes": "Price span wrapped in a new h3.amount; the target itself is unchanged. Expected: relocated via ancestors (extra level) while text and tag match."
+}

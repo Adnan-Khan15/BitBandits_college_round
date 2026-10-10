@@ -1,0 +1,165 @@
+.header {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  min-height: var(--header-h);
+  padding: 0 1rem 0 1.1rem;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line-strong);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  color: var(--ink);
+  text-decoration: none;
+}
+
+/* the mark: a violet patch over a ruled line - the product in 12px */
+.mark {
+  width: 12px;
+  height: 12px;
+  background: var(--patch);
+  border-radius: 1px;
+  box-shadow: 3px 3px 0 var(--surface), 3px 3px 0 1px var(--line-strong);
+}
+
+.name {
+  font-weight: 700;
+  font-size: 0.95rem;
+  letter-spacing: 0.04em;
+}
+
+.nav {
+  display: flex;
+  align-self: stretch;
+  gap: 0.25rem;
+}
+
+.navItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0 0.75rem;
+  color: var(--ink-2);
+  font-size: var(--fs-s);
+  font-weight: 520;
+  text-decoration: none;
+  border-bottom: 2px solid transparent;
+}
+
+.navItem:hover {
+  color: var(--ink);
+}
+
+.navItem[aria-current='page'] {
+  color: var(--ink);
+  border-bottom-color: var(--ink);
+}
+
+.count {
+  min-width: 1.2rem;
+  padding: 0 0.3rem;
+  border-radius: 999px;
+  background: var(--patch);
+  color: #fff;
+  font-size: var(--fs-xs);
+  line-height: 1.2rem;
+  text-align: center;
+}
+
+.team {
+  display: flex;
+  gap: 0.25rem;
+  margin-left: auto;
+}
+
+.person {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.25rem 0.55rem 0.25rem 0.3rem;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: none;
+  cursor: pointer;
+  opacity: 0.72;
+}
+
+.person:hover {
+  opacity: 1;
+  background: var(--paper);
+}
+
+.person[aria-pressed='true'] {
+  opacity: 1;
+  border-color: var(--line-strong);
+  background: var(--paper);
+}
+
+.avatar {
+  display: grid;
+  place-items: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 50%;
+  color: #fff;
+  font-size: var(--fs-s);
+  font-weight: 650;
+}
+
+.developer {
+  background: #3d5a80;
+}
+
+.reviewer {
+  background: #7a4b8c;
+}
+
+.release_manager {
+  background: #2f6f62;
+}
+
+.who {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.15;
+  text-align: left;
+}
+
+.personName {
+  font-size: var(--fs-s);
+  font-weight: 600;
+}
+
+.personRole {
+  font-size: 0.6875rem;
+  color: var(--ink-3);
+}
+
+/* projector width and below: names stay, roles go */
+@media (max-width: 1280px) {
+  .personRole {
+    display: none;
+  }
+}
+
+@media (max-width: 900px) {
+  .header {
+    flex-wrap: wrap;
+    gap: 0.25rem 1rem;
+    padding: 0.4rem 0.75rem;
+  }
+
+  .nav {
+    order: 3;
+    flex: 1 1 100%;
+    overflow-x: auto;
+    min-height: 2.25rem;
+  }
+
+  .who {
+    display: none;
+  }
+}

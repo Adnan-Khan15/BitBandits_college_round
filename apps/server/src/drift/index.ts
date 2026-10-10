@@ -1,0 +1,276 @@
+// apps/server/src/drift/index.ts (owner: Dev B - replaces the scaffold stub).
+// Drift Sentinel (PLAN sections 6, 11.9, 11.12, 11.13): poll the upstream through the
+// snapshot service, re-anchor every live patch with the engine resolver, persist a
+// DriftReport, propose heal revisions for `healed` patches and a quarantine release for
+// `at_risk`/`broken` ones, and serve the benchmark rows.
+import { readFileSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import type { FastifyInstance } from 'fastify';
+import { nanoid } from 'nanoid';
+import { AppError, DEFAULT_THRESHOLDS, USER_HEADER } from '@patchwork/shared';
+import type { BenchRow, DriftReport, DriftService, FrozenPatch, ServiceRegistry } from '@patchwork/shared';
+import { analyzeDrift, resolveAnchor } from '@patchwork/engine';
+import { documentFromHtml } from '@patchwork/engine/node';
+import type { Db } from '../db/sqlite.js';
+import { createDriftRepo, type DriftRepo } from './repo.js';
+
+const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../../..');
+const DEFAULT_BENCH_FILE = join(repoRoot, 'data', 'bench.json');
+
+const newId = (prefix: string): string => `${prefix}_${nanoid(12)}`;
+
+/** PatchBody.urlPath is an exact path or a trailing-* prefix glob such as '/products/*'. */
+function pathMatches(pattern: string, path: string): boolean {
+  if (pattern === path) return true;
+  if (pattern.endsWith('/*')) return path.startsWith(pattern.slice(0, -1));
+  return false;
+}
+
+/** DriftService plus a lookup by id, used by the explain route. */
+export interface DriftServiceExt extends DriftService {
+  get(id: string): DriftReport | null;
+}
+
+export interface DriftServiceOptions {
+  benchFile?: string;
+}
+
+export function createDriftService(
+  registry?: ServiceRegistry,
+  db?: Db,
+  opts: DriftServiceOptions = {},
+): DriftServiceExt {
+  const benchFile = opts.benchFile ?? DEFAULT_BENCH_FILE;
+  let repo: DriftRepo | null = null;
+
+  const requireDeps = (): { registry: ServiceRegistry; repo: DriftRepo } => {
+    if (!registry || !db) {
+      throw new AppError(
+        'INVALID_STATE',
+        'drift service needs (registry, db); buildRegistry must pass them (PLAN 11.13)',
+      );
+    }
+    repo ??= createDriftRepo(db);
+    return { registry, repo };
+  };
+
+  return {
+    async check(projectId, actorId): Promise<DriftReport[]> {
+      const { registry: reg, repo: r } = requireDeps();
+      const project = reg.core.getProject(projectId);
+      if (!project) throw new AppError('NOT_FOUND', `No project ${projectId}`);
+      const live = reg.releases.live(projectId);
+      if (!live) throw new AppError('INVALID_STATE', `Project ${projectId} has no live release to check`);
+
+      const reports: DriftReport[] = [];
+      for (const path of project.paths) {
+        const patches = live.patches.filter((p) => pathMatches(p.urlPath, path));
+        if (patches.length === 0) continue;
+
+        const previous = reg.snapshots.latest(projectId, path);
+        const fresh = await reg.snapshots.capture(projectId, path);
+        if (previous && previous.domHash === fresh.domHash) continue; // upstream unchanged on this path
+
+        const dom = documentFromHtml(fresh.html, `${project.upstreamOrigin}${path}`);
+        const results = analyzeDrift(dom.document, patches, fresh.boxes);
+
+        const report: DriftReport = {
+          id: newId('drf'),
+          projectId,
+          releaseId: live.id,
+          path,
+          previousSnapshotId: previous?.id ?? null,
+          snapshotId: fresh.id,
+          createdAt: new Date().toISOString(),
+          results,
+          quarantineReleaseId: null,
+        };
+        r.insert(report);
+        reg.audit.append({
+          projectId,
+          type: 'drift.detected',
+          actorId,
+          subject: { type: 'drift', id: report.id },
+          data: {
+            path,
+            releaseId: live.id,
+            snapshotId: fresh.id,
+            previousSnapshotId: previous?.id ?? null,
+            health: results.map((res) => ({ patchId: res.patchId, health: res.health })),
+          },
+        });
+
+        for (const result of results) {
+          if (result.health !== 'healed' || !result.proposedFingerprints) continue;
+          reg.core.proposeHeal(
+            result.patchId,
+            result.proposedFingerprints,
+            actorId,
+            `Drift heal from ${report.id} (${path})`,
+          );
+          reg.audit.append({
+            projectId,
+            type: 'patch.heal_proposed',
+            actorId,
+            subject: { type: 'patch', id: result.patchId },
+            data: { reportId: report.id, revision: result.revision, path },
+          });
+        }
+        reports.push(report);
+      }
+      return reports;
+    },
+
+    list(projectId): DriftReport[] {
+      return requireDeps().repo.list(projectId);
+    },
+
+    get(id): DriftReport | null {
+      return requireDeps().repo.get(id);
+    },
+
+    async proposeQuarantine(reportId, actorId) {
+      const { registry: reg, repo: r } = requireDeps();
+      const report = r.get(reportId);
+      if (!report) throw new AppError('NOT_FOUND', `No drift report ${reportId}`);
+      const release = reg.releases.get(report.releaseId);
+      if (!release) throw new AppError('NOT_FOUND', `No release ${report.releaseId}`);
+
+      // A release spans several pages: use the latest report of every page checked against the
+      // same live release, so one quarantine leaves out every unsafe patch, not just this page's.
+      const latestPerPath = new Map<string, DriftReport>([[report.path, report]]);
+      for (const other of r.list(report.projectId)) {
+        if (other.releaseId !== report.releaseId || latestPerPath.has(other.path)) continue;
+        latestPerPath.set(other.path, other); // list() is newest first
+      }
+      const reports = [...latestPerPath.values()];
+      const unsafe = new Set(
+        reports
+          .flatMap((rep) => rep.results)
+          .filter((res) => res.health === 'at_risk' || res.health === 'broken')
+          .map((res) => res.patchId),
+      );
+      if (unsafe.size === 0) {
+        throw new AppError('INVALID_STATE', `Drift report ${reportId} has no at_risk or broken patches`);
+      }
+
+      // The live release minus the patches the resolver could not place safely.
+      const kept: FrozenPatch[] = release.patches.filter((p) => !unsafe.has(p.patchId));
+      const quarantine = reg.releases.create(
+        report.projectId,
+        {
+          origin: 'quarantine',
+          patches: kept,
+          note: `Quarantine from drift ${report.id}: excludes ${[...unsafe].join(', ')}`,
+        },
+        actorId,
+      );
+      for (const rep of reports) r.setQuarantineRelease(rep.id, quarantine.id);
+      reg.audit.append({
+        projectId: report.projectId,
+        type: 'release.quarantine_proposed',
+        actorId,
+        subject: { type: 'release', id: quarantine.id },
+        data: {
+          reportId: report.id,
+          reportIds: reports.map((rep) => rep.id),
+          excluded: [...unsafe],
+          kept: kept.map((p) => p.patchId),
+        },
+      });
+      return quarantine;
+    },
+
+    bench(): BenchRow[] {
+      let raw: string;
+      try {
+        raw = readFileSync(benchFile, 'utf8');
+      } catch {
+        return []; // bench has not run yet: nothing to show
+      }
+      try {
+        const parsed = JSON.parse(raw) as unknown;
+        if (!Array.isArray(parsed)) throw new Error('bench.json is not an array');
+        return parsed as BenchRow[];
+      } catch (err) {
+        throw new AppError('INTERNAL', `bench file ${benchFile} is unreadable: ${(err as Error).message}`);
+      }
+    },
+  };
+}
+
+function actorOf(req: { headers: Record<string, unknown> }): string {
+  const header = req.headers[USER_HEADER];
+  return typeof header === 'string' && header !== '' ? header : 'system';
+}
+
+export function registerDriftRoutes(app: FastifyInstance, registry: ServiceRegistry): void {
+  // The scaffold registers temporary 501 stubs for these paths in app.ts; when Dev A
+  // removes those entries the real handlers below take over. Guarding on hasRoute keeps
+  // this module safe to land before that edit (no duplicate-route crash).
+  if (!app.hasRoute({ method: 'POST', url: '/api/projects/:pid/drift/check' })) {
+    app.post('/api/projects/:pid/drift/check', async (req) => {
+      const { pid } = req.params as { pid: string };
+      return { items: await registry.drift.check(pid, actorOf(req)) };
+    });
+  }
+  if (!app.hasRoute({ method: 'GET', url: '/api/projects/:pid/drift' })) {
+    app.get('/api/projects/:pid/drift', async (req) => {
+      const { pid } = req.params as { pid: string };
+      return { items: registry.drift.list(pid) };
+    });
+  }
+  if (!app.hasRoute({ method: 'POST', url: '/api/drift/:id/quarantine' })) {
+    app.post('/api/drift/:id/quarantine', async (req) => {
+      const { id } = req.params as { id: string };
+      return registry.drift.proposeQuarantine(id, actorOf(req));
+    });
+  }
+  // Explain a drift report in words, and show what a selector-only tool would have done on the
+  // same snapshot: the stored CSS selector, resolved with resolverMode 'selector' (baseline B1).
+  app.get('/api/drift/:id/explain', async (req) => {
+    const { id } = req.params as { id: string };
+    const report = (registry.drift as DriftServiceExt).get(id);
+    if (!report) throw new AppError('NOT_FOUND', `No drift report ${id}`);
+    const snapshot = registry.snapshots.get(report.snapshotId);
+    const release = registry.releases.get(report.releaseId);
+    const project = registry.core.getProject(report.projectId);
+    if (!snapshot || !release || !project) throw new AppError('NOT_FOUND', `Drift report ${id} is missing its snapshot or release`);
+    const doc = documentFromHtml(snapshot.html, `${project.upstreamOrigin}${report.path}`).document;
+    const textAt = (path: string | null | undefined): string | null => {
+      if (!path) return null;
+      const el = doc.querySelector(path);
+      const text = (el?.textContent ?? '').replace(/\s+/g, ' ').trim();
+      return el ? text.slice(0, 80) || `<${el.tagName.toLowerCase()}>` : null;
+    };
+    return {
+      items: report.results.map((result) => {
+        const patch = release.patches.find((p) => p.patchId === result.patchId);
+        return {
+          patchId: result.patchId,
+          title: patch?.title ?? result.patchId,
+          anchors: result.resolutions.map((res) => {
+            const fp = patch?.anchors[res.anchorId];
+            const selector = fp
+              ? resolveAnchor(doc, res.anchorId, fp, { mode: 'selector', thresholds: { ...DEFAULT_THRESHOLDS } })
+              : null;
+            return {
+              anchorId: res.anchorId,
+              originalText: fp?.text ?? null,
+              matchedText: textAt(res.elementPath),
+              runnerUpText: textAt(res.runnerUp?.elementPath),
+              selectorFound: selector !== null && selector.status !== 'not_found' && selector.elementPath !== null,
+              selectorText: selector ? textAt(selector.elementPath) : null,
+            };
+          }),
+        };
+      }),
+    };
+  });
+
+  if (!app.hasRoute({ method: 'GET', url: '/api/bench' })) {
+    app.get('/api/bench', async () => ({ items: registry.drift.bench() }));
+  }
+}
+

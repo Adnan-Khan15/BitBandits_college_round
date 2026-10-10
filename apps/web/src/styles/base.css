@@ -1,0 +1,210 @@
+/* PATCHWORK web app - tokens and base layer.
+   Design: a precision kit for fixing live websites. The website is the hero; the chrome is quiet
+   steel. One patch violet marks only what PATCHWORK changed; live green and broken rust carry
+   state, always with an icon and a word. Light theme for projectors. System fonts (offline demo),
+   tabular numerals for every measured value. */
+
+:root {
+  /* chrome */
+  --paper: #edeff2;
+  --surface: #ffffff;
+  --surface-sunk: #e4e7ec;
+  --ink: #151a22;
+  --ink-2: #474f5c;
+  --ink-3: #6b7380;
+  --line: #d6dae0;
+  --line-strong: #b1b7c1;
+  /* primary chrome action (not the patch accent) */
+  --blueprint: #22324d;
+  --blueprint-soft: #e2e7f0;
+  /* the patch accent: only for things PATCHWORK changed */
+  --patch: #5b34e0;
+  --patch-soft: #ece7fd;
+  --patch-line: #c8baf7;
+  /* state */
+  --healthy: #0f7b5f;
+  --healthy-soft: #dcf0e9;
+  --atrisk: #9a6700;
+  --atrisk-soft: #f8edcf;
+  --broken: #c2410c;
+  --broken-soft: #fbe5d9;
+  --neutral-soft: #eceef1;
+
+  /* type */
+  --font: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Roboto, system-ui, sans-serif;
+  --fs-xs: 0.75rem;
+  --fs-s: 0.8125rem;
+  --fs-m: 0.9375rem;
+  --fs-l: 1.125rem;
+  --fs-xl: 1.5rem;
+  --fs-xxl: 1.875rem;
+
+  /* structure */
+  --radius: 3px;
+  --header-h: 3.5rem;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font);
+  font-size: var(--fs-m);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3 {
+  margin: 0;
+  font-weight: 640;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+}
+
+h1 { font-size: var(--fs-xl); }
+h2 { font-size: var(--fs-l); }
+h3 { font-size: var(--fs-m); }
+
+p { margin: 0 0 0.75rem; }
+p:last-child { margin-bottom: 0; }
+
+a {
+  color: var(--blueprint);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+
+/* measured values are read in columns — always tabular */
+.num,
+td.num,
+th.num {
+  font-variant-numeric: tabular-nums;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--blueprint);
+  outline-offset: 1px;
+  border-radius: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* --- shared primitives ---------------------------------------------------- */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.3rem 0.7rem;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  font-size: var(--fs-s);
+  cursor: pointer;
+}
+
+.btn:hover:not(:disabled) {
+  border-color: var(--ink-3);
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.btn--primary {
+  background: var(--blueprint);
+  border-color: var(--blueprint);
+  color: #fff;
+}
+
+.btn--primary:hover:not(:disabled) {
+  border-color: var(--ink);
+}
+
+.btn--danger {
+  border-color: var(--broken);
+  color: var(--broken);
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-s);
+}
+
+.table th {
+  text-align: left;
+  font-weight: 600;
+  color: var(--ink-2);
+  padding: 0.35rem 0.6rem 0.35rem 0;
+  border-bottom: 1px solid var(--line-strong);
+  white-space: nowrap;
+}
+
+.table td {
+  padding: 0.45rem 0.6rem 0.45rem 0;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+}
+
+.table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.table--rows tbody tr:hover {
+  background: var(--surface);
+}
+
+.mono-id {
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+}
+
+.prose {
+  max-width: 80ch;
+  color: var(--ink-2);
+}
+
+.btn--patch {
+  background: var(--patch);
+  border-color: var(--patch);
+  color: #fff;
+}
+
+.btn--patch:hover:not(:disabled) {
+  border-color: var(--ink);
+}
+
+.btn--big {
+  padding: 0.55rem 1rem;
+  font-size: var(--fs-m);
+  font-weight: 560;
+}
+
+.muted {
+  color: var(--ink-3);
+  font-size: var(--fs-xs);
+}

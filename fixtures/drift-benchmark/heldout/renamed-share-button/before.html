@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Why self-healing locators matter — Field Notes</title>
+</head>
+<body>
+  <header class="site-header">
+    <a class="logo" href="/">Field Notes</a>
+    <nav class="site-nav">
+      <a href="/">Home</a>
+      <a href="/archive">Archive</a>
+      <a href="/about">About</a>
+    </nav>
+  </header>
+
+  <div class="layout">
+    <main class="container">
+      <article class="post">
+        <h1 class="post-title">Why self-healing locators matter</h1>
+        <p class="post-meta">By Aarohi Sharma · 12 Aug 2026 · 6 min read</p>
+        <div class="post-body">
+          <p>Every front-end team keeps a suite of browser tests that depend on selectors. A container rename on a Tuesday turns a green suite red, and the fix is tedious: find the selector, update it, re-run, repeat.</p>
+          <p>The interesting question is not how to make selectors robust, but what happens when the page changes and nobody is watching. That is where a resolver that scores candidates instead of matching strings earns its keep.</p>
+          <h2>Scoring beats string matching</h2>
+          <p>Compare candidates on weighted features: tag, text, position, neighbours. A single renamed class barely moves the score; a whole redesign correctly fails the threshold.</p>
+        </div>
+        <div class="post-share" aria-label="Share this article">
+          <span class="post-share__label">Share</span>
+          <button class="button button--ghost" id="share-btn" type="button">Share article</button>
+        </div>
+      </article>
+
+      <section class="comments">
+        <h2 class="comments-title">Comments</h2>
+        <ul class="comment-list">
+          <li class="comment">
+            <p class="comment-text">We cut maintenance time by a third after switching to scored matching.</p>
+            <p class="comment-author">— Dev</p>
+          </li>
+          <li class="comment">
+            <p class="comment-text">Any advice on thresholds for pages with repeated cards?</p>
+            <p class="comment-author">— Riya</p>
+          </li>
+        </ul>
+        <form class="comment-form" id="comment-form">
+          <label class="comment-form__label" for="comment-text">Leave a comment</label>
+          <textarea class="comment-form__input" id="comment-text" name="comment" rows="3"></textarea>
+          <button class="button button--primary" id="comment-submit" type="submit">Post comment</button>
+        </form>
+      </section>
+    </main>
+
+    <aside class="sidebar">
+      <section class="sidebar-block">
+        <h3 class="sidebar-title">Popular</h3>
+        <ul class="sidebar-list">
+          <li><a href="/posts/flaky-tests">Flaky tests, honestly</a></li>
+          <li><a href="/posts/dom-hashing">DOM hashing in practice</a></li>
+        </ul>
+      </section>
+      <section class="sidebar-block">
+        <h3 class="sidebar-title">Topics</h3>
+        <ul class="sidebar-list">
+          <li><a href="/topics/testing">Testing</a></li>
+          <li><a href="/topics/tooling">Tooling</a></li>
+        </ul>
+      </section>
+    </aside>
+  </div>
+
+  <footer class="site-footer">© 2026 Field Notes</footer>
+</body>
+</html>

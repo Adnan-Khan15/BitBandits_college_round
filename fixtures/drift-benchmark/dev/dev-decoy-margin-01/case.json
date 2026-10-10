@@ -1,0 +1,7 @@
+{
+  "id": "dev-decoy-margin-01",
+  "category": "decoy",
+  "targetBefore": "#cta-checkout",
+  "expectedAfter": "#cta-checkout",
+  "notes": "v2-style mutation: button moved into footer.cart-bar and its classes renamed, with a look-alike secondary button (Save cart for later) beside it. Expected: relocated to the primary CTA (stable id + text) with the secondary as runner-up; margin must stay above 0.15."
+}

@@ -1,0 +1,48 @@
+.builder {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.row select,
+.row input {
+  font: inherit;
+  font-size: var(--fs-s);
+  padding: 0.25rem 0.35rem;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.row input {
+  min-width: 9rem;
+}
+
+.hint {
+  margin: 0;
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+}
+
+.anchors {
+  display: inline-flex;
+  gap: 0.25rem;
+}
+
+.anchorChip {
+  font: inherit;
+  font-size: var(--fs-xs);
+  padding: 0.1rem 0.35rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--neutral-soft);
+  cursor: pointer;
+}
