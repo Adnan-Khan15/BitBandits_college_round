@@ -33,6 +33,7 @@ import type { Db } from '../db/sqlite.js';
 import { loadEnv, type Env } from '../env.js';
 import { newId, type CoreServiceExt } from './index.js';
 import { pickBody } from './repo.js';
+import { getActiveProjectId, setActiveProjectId } from '../active.js';
 import { validatePatchBody } from './validate.js';
 
 const PATCH_STATUSES: PatchStatus[] = ['draft', 'in_review', 'changes_requested', 'approved', 'merged', 'rejected'];
@@ -397,6 +398,93 @@ export function registerCoreRoutes(
     const preview = core.getPreview((req.params as { id: string }).id);
     if (!preview) throw new AppError('NOT_FOUND', 'No such preview');
     return { preview, url: previewUrl(preview) };
+  });
+
+  // --- connected sites ------------------------------------------------------------
+
+  /** http(s)://host[:port] only: no path, query, fragment or credentials. Returns the normalised origin. */
+  const checkOrigin = (raw: string): string => {
+    let url: URL;
+    try {
+      url = new URL(raw.trim());
+    } catch {
+      throw new AppError('VALIDATION_FAILED', `“${raw}” is not a web address. Use http://localhost:3000 or https://example.com.`);
+    }
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+      throw new AppError('VALIDATION_FAILED', 'The address must start with http:// or https://.');
+    }
+    if (url.username || url.password) throw new AppError('VALIDATION_FAILED', 'The address must not contain a user name or password.');
+    if ((url.pathname !== '/' && url.pathname !== '') || url.search || url.hash) {
+      throw new AppError('VALIDATION_FAILED', 'Use only the site address, without a path, e.g. http://localhost:3000. Add pages below.');
+    }
+    return url.origin;
+  };
+
+  app.post('/api/projects', async (req) => {
+    actor(req, 'release_manager');
+    const body = (req.body ?? {}) as { name?: unknown; upstreamOrigin?: unknown; paths?: unknown };
+    const name = typeof body.name === 'string' ? body.name.trim() : '';
+    if (name === '' || name.length > 60) throw new AppError('VALIDATION_FAILED', 'Give the site a name (up to 60 characters).');
+    if (typeof body.upstreamOrigin !== 'string') throw new AppError('VALIDATION_FAILED', 'Enter the site address.');
+    const origin = checkOrigin(body.upstreamOrigin);
+    const rawPaths = Array.isArray(body.paths) && body.paths.length > 0 ? body.paths : ['/'];
+    const paths = [...new Set(rawPaths.map((p) => String(p).trim()).filter(Boolean))].slice(0, 10);
+    for (const p of paths) {
+      if (!p.startsWith('/') || p.startsWith('//') || p.includes('?') || p.includes('#')) {
+        throw new AppError('VALIDATION_FAILED', `Pages must look like / or /cart, not “${p}”.`);
+      }
+    }
+    if (repo.listProjects().some((p) => p.upstreamOrigin === origin)) {
+      throw new AppError('INVALID_STATE', `${origin} is already connected.`);
+    }
+    // the site must answer now, otherwise the Studio would show an error page
+    try {
+      await fetch(origin + paths[0], { method: 'GET', redirect: 'manual', signal: AbortSignal.timeout(5000) });
+    } catch {
+      throw new AppError('UPSTREAM_UNREACHABLE', `Could not reach ${origin}. Is the site running?`);
+    }
+    const project = {
+      id: newId('prj'),
+      name,
+      upstreamOrigin: origin,
+      paths,
+      liveReleaseId: null,
+      createdAt: new Date().toISOString(),
+    };
+    repo.insertProject(project);
+    return project;
+  });
+
+  /** Whether the site's own server lets browsers show it in a frame (the Studio's Original tab). */
+  app.get('/api/projects/:pid/framing', async (req) => {
+    const project = requireProject((req.params as { pid: string }).pid);
+    try {
+      const res = await fetch(project.upstreamOrigin + (project.paths[0] ?? '/'), {
+        redirect: 'manual',
+        signal: AbortSignal.timeout(4000),
+      });
+      const xfo = res.headers.get('x-frame-options');
+      const csp = res.headers.get('content-security-policy') ?? '';
+      const blocked = (xfo !== null && xfo.trim() !== '') || /frame-ancestors\s+(?!\*)/i.test(csp);
+      return { framable: !blocked };
+    } catch {
+      return { framable: false };
+    }
+  });
+
+  app.get('/api/active-project', async () => {
+    const id = getActiveProjectId();
+    const project = core.getProject(id);
+    if (!project) throw new AppError('NOT_FOUND', `The active site ${id} does not exist. Run ./demo.sh to seed it.`);
+    return project;
+  });
+
+  app.put('/api/active-project', async (req) => {
+    actor(req);
+    const { projectId } = (req.body ?? {}) as { projectId?: unknown };
+    if (typeof projectId !== 'string' || !core.getProject(projectId)) throw new AppError('NOT_FOUND', 'No such site.');
+    setActiveProjectId(projectId);
+    return core.getProject(projectId);
   });
 
   // --- audit --------------------------------------------------------------------

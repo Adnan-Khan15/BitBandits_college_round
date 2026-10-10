@@ -14,6 +14,7 @@ import { migrate } from './db/migrate.js';
 import { loadEnvFromDisk } from './env.js';
 import { buildRegistry } from './registry.js';
 import { registerGatewayRoutes } from './gateway/index.js';
+import { initActiveProject } from './active.js';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 
@@ -22,6 +23,7 @@ async function main(): Promise<void> {
 
   const db: Db = openDb(env.PW_DB_PATH);
   migrate(db);
+  initActiveProject(env.PW_DB_PATH, env.PW_PROJECT_ID);
 
   const registry = buildRegistry(db, env);
 

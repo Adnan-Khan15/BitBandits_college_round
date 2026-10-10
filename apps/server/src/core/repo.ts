@@ -98,6 +98,8 @@ function rowToPreview(r: PreviewRow): Preview {
 
 export interface CoreRepo {
   getProject(id: Id): Project | null;
+  listProjects(): Project[];
+  insertProject(p: Project): void;
   getPatch(id: Id): Patch | null;
   listPatches(projectId: Id, status?: PatchStatus): Patch[];
   insertPatch(p: Patch): void;
@@ -125,6 +127,17 @@ export function createCoreRepo(db: Db): CoreRepo {
   };
 
   return {
+    listProjects() {
+      const rows = db.prepare('SELECT * FROM projects ORDER BY created_at, id').all() as unknown as ProjectRow[];
+      return rows.map(rowToProject);
+    },
+
+    insertProject(p) {
+      db.prepare(
+        'INSERT INTO projects (id, name, upstream_origin, paths_json, live_release_id, created_at) VALUES (?, ?, ?, ?, NULL, ?)',
+      ).run(p.id, p.name, p.upstreamOrigin, JSON.stringify(p.paths), p.createdAt);
+    },
+
     getProject(id) {
       const row = db.prepare('SELECT * FROM projects WHERE id = ?').get(id) as unknown as
         | ProjectRow
