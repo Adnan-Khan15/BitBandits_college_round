@@ -27,15 +27,16 @@ async function main(): Promise<void> {
 
   // Control plane (:4000)
   const control = buildControlApp({ registry, db, env, logger: true });
-  await control.listen({ port: env.PW_CONTROL_PORT, host: '127.0.0.1' });
 
   // Serve the built web app in start mode (PLAN section 17: npm run build && npm start).
+  // Plugins must be registered before listen(), or Fastify throws AVV_ERR_ROOT_PLG_BOOTED.
   const webDist = join(repoRoot, 'apps', 'web', 'dist');
   if (existsSync(join(webDist, 'index.html'))) {
     const { default: fastifyStatic } = await import('@fastify/static');
     await control.register(fastifyStatic, { root: webDist });
     control.log.info(`serving ${webDist} at http://localhost:${env.PW_CONTROL_PORT}`);
   }
+  await control.listen({ port: env.PW_CONTROL_PORT, host: '127.0.0.1' });
 
   // Live gateway (:4100) - only the active release, never reads the preview cookie.
   const live = Fastify({ logger: true });
