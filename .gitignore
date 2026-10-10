@@ -40,7 +40,7 @@ ehthumbs.db
 Desktop.ini
 .DS_Store
 
-# PATCHWORK scaffold (PLAN 13.3 step 7)
+# PATCHWORK runtime data (PLAN section 3)
 data/
 test-results/
 playwright-report/
