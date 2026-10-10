@@ -289,7 +289,7 @@ export function EditorScreen() {
         <div className={styles.meta}>
           <PatchStatusChip status={draft.status ?? 'draft'} />
           <span className="mono-id">{draft.patchId ?? 'unsaved'}</span>
-          {draft.patchId ? <span className="mono-id">revision {draft.expectedRevision}</span> : null}
+          {draft.patchId ? <span className="mono-id"> · revision {draft.expectedRevision}</span> : null}
         </div>
       </div>
 
