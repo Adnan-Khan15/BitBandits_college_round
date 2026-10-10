@@ -1,6 +1,8 @@
 // apps/server/src/releases/index.ts (owner: Dev C)
-// Releases (PLAN 11.8): freeze head, verify gate, deploy (one pointer move), rollback, beacons.
-// Health check + auto-rollback land in solo Phase 3.
+// Releases (PLAN 11.8): freeze head, verify gate, deploy (one pointer move), health, rollback, beacons.
+// Health (solo 3-hour version): after every pointer move a live verification run; if a deploy's run
+// fails, the pointer returns to previousReleaseId (auto_rollback). Rollbacks get a health run too but
+// never trigger another automatic rollback.
 import { createHash } from 'node:crypto';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { nanoid } from 'nanoid';
@@ -23,6 +25,7 @@ import type {
   ReleaseStatus,
   RuntimeManifest,
   ServiceRegistry,
+  VerificationRun,
 } from '@patchwork/shared';
 import type { Db } from '../db/sqlite.js';
 import { loadEnv, type Env } from '../env.js';
@@ -111,12 +114,17 @@ export const manifestHashOf = (patches: FrozenPatch[]): string =>
 
 export interface ReleaseServiceExt extends ReleaseService {
   deployments(projectId: Id): Deployment[];
+  /** Starts a release verification: status verifying -> verified | verification_failed. */
+  verify(releaseId: Id, actorId: Id): VerificationRun;
 }
+
+/** VerifyService plus the completion hook verify/index.ts exposes (reached via the registry). */
+type WaitableVerify = ServiceRegistry['verify'] & { wait?(id: Id): Promise<VerificationRun> };
 
 export function createReleaseService(
   db: Db,
   registry: ServiceRegistry,
-  env: Env = loadEnv(),
+  _env: Env = loadEnv(),
 ): ReleaseServiceExt {
   const get = (id: Id): Release | null => {
     const row = db.prepare('SELECT * FROM releases WHERE id = ?').get(id) as unknown as
@@ -185,6 +193,72 @@ export function createReleaseService(
       ).run(id, projectId, toReleaseId ?? NO_RELEASE, previous, kind, reason, actorId, now);
       return getDeployment(id);
     });
+
+  const endDeployment = (id: Id, status: Deployment['status'], healthRunId: Id | null): void => {
+    db.prepare('UPDATE deployments SET status = ?, ended_at = ?, health_run_id = COALESCE(?, health_run_id) WHERE id = ?').run(
+      status,
+      new Date().toISOString(),
+      healthRunId,
+      id,
+    );
+  };
+
+  /**
+   * Post-deploy health: one live verification run. A failed deploy moves the pointer back to
+   * previousReleaseId (auto_rollback); a rollback's own health run never rolls back again.
+   */
+  const scheduleHealth = (deployment: Deployment, mayAutoRollback: boolean): void => {
+    const projectId = deployment.projectId;
+    void (async () => {
+      const run = await registry.verify.runToCompletion(projectId, { kind: 'live' }, deployment.actorId);
+      const current = getDeployment(deployment.id);
+      if (current.status !== 'in_progress') return; // superseded by a later rollback meanwhile
+      if (run.status === 'passed') {
+        endDeployment(deployment.id, 'healthy', run.id);
+        registry.audit.append({
+          projectId,
+          type: 'deployment.healthy',
+          actorId: 'system',
+          subject: { type: 'deployment', id: deployment.id },
+          data: { releaseId: deployment.releaseId, healthRunId: run.id, summary: run.summary },
+        });
+        return;
+      }
+      endDeployment(deployment.id, 'failed', run.id);
+      registry.audit.append({
+        projectId,
+        type: 'deployment.failed',
+        actorId: 'system',
+        subject: { type: 'deployment', id: deployment.id },
+        data: { releaseId: deployment.releaseId, healthRunId: run.id, summary: run.summary },
+      });
+      if (!mayAutoRollback || liveId(projectId) !== deployment.releaseId) return;
+      const back = movePointer(
+        projectId,
+        deployment.previousReleaseId,
+        'auto_rollback',
+        'system',
+        `Health check failed for ${deployment.releaseId}: ${run.summary}`,
+        'rolled_back',
+      );
+      registry.audit.append({
+        projectId,
+        type: 'release.auto_rolled_back',
+        actorId: 'system',
+        subject: { type: 'deployment', id: back.id },
+        data: {
+          fromReleaseId: deployment.releaseId,
+          toReleaseId: deployment.previousReleaseId,
+          failedDeploymentId: deployment.id,
+          healthRunId: run.id,
+        },
+      });
+      scheduleHealth(back, false);
+    })().catch((err: unknown) => {
+      endDeployment(deployment.id, 'failed', null);
+      console.error('[releases] health check crashed:', err);
+    });
+  };
 
   return {
     create(projectId, input, actorId): Release {
@@ -277,7 +351,7 @@ export function createReleaseService(
       if (opts.force) {
         if (reason === '') throw new AppError('VALIDATION_FAILED', 'A force deploy needs a reason');
         kind = 'force_deploy';
-      } else if (release.status === 'verified' || (env.PW_SLICE_MODE === 1 && release.status === 'candidate')) {
+      } else if (release.status === 'verified') {
         kind = 'deploy';
       } else {
         throw new AppError(
@@ -299,6 +373,7 @@ export function createReleaseService(
           reason,
         },
       });
+      scheduleHealth(deployment, true);
       return deployment;
     },
 
@@ -348,7 +423,26 @@ export function createReleaseService(
           reason,
         },
       });
+      scheduleHealth(deployment, false);
       return deployment;
+    },
+
+    verify(releaseId, actorId): VerificationRun {
+      const release = get(releaseId);
+      if (!release) throw new AppError('NOT_FOUND', `No release ${releaseId}`);
+      if (!['candidate', 'verified', 'verification_failed'].includes(release.status)) {
+        throw new AppError('INVALID_STATE', `R${release.number} is ${release.status}; it cannot be verified now`);
+      }
+      const verifier = registry.verify as WaitableVerify;
+      const run = verifier.start(release.projectId, { kind: 'release', releaseId }, actorId);
+      db.prepare("UPDATE releases SET status = 'verifying', verification_run_id = ? WHERE id = ?").run(run.id, releaseId);
+      void (verifier.wait ? verifier.wait(run.id) : Promise.resolve(run)).then((done) => {
+        // Only flip a release that is still waiting on this run (it may have been force-deployed).
+        db.prepare(
+          "UPDATE releases SET status = ? WHERE id = ? AND status = 'verifying' AND verification_run_id = ?",
+        ).run(done.status === 'passed' ? 'verified' : 'verification_failed', releaseId, run.id);
+      });
+      return run;
     },
 
     recordBeacon(p: BeaconPayload): void {
@@ -417,6 +511,11 @@ export function registerReleaseRoutes(app: FastifyInstance, registry: ServiceReg
     const actor = releaseManager(req);
     const body = deployRequestSchema.parse(req.body ?? {});
     return releases.deploy(id, actor, body);
+  });
+
+  app.post('/api/releases/:id/verify', async (req) => {
+    const { id } = req.params as { id: string };
+    return releases.verify(id, releaseManager(req));
   });
 
   app.post('/api/projects/:pid/rollback', async (req) => {
