@@ -20,36 +20,29 @@ export interface AppOptions {
   logger?: boolean;
 }
 
-/** Every A-owned control route that is still a stub until Phase 2 (steps 10-15). */
-const STUB_ROUTES: Array<Pick<RouteOptions, 'method' | 'url'> & { owner: string; phase: string }> = [
-  { method: 'GET', url: '/api/projects/:pid/patches', owner: 'A', phase: 'Phase 2 step 12' },
-  { method: 'POST', url: '/api/projects/:pid/patches', owner: 'A', phase: 'Phase 2 step 12' },
-  { method: 'GET', url: '/api/patches/:id', owner: 'A', phase: 'Phase 2 step 12' },
-  { method: 'PUT', url: '/api/patches/:id', owner: 'A', phase: 'Phase 2 step 12' },
-  { method: 'POST', url: '/api/patches/:id/validate', owner: 'A', phase: 'Phase 2 step 10' },
-  { method: 'POST', url: '/api/patches/:id/submit', owner: 'A', phase: 'Phase 2 step 12' },
-  { method: 'POST', url: '/api/patches/:id/reviews', owner: 'A', phase: 'Phase 2 step 12' },
-  { method: 'POST', url: '/api/patches/:id/merge', owner: 'A', phase: 'Phase 2 step 13' },
-  { method: 'POST', url: '/api/projects/:pid/conflicts', owner: 'A', phase: 'Phase 2 step 13' },
-  { method: 'POST', url: '/api/projects/:pid/previews', owner: 'A', phase: 'Phase 2 step 14' },
-  { method: 'PUT', url: '/api/previews/:id', owner: 'A', phase: 'Phase 2 step 14' },
-  { method: 'GET', url: '/api/projects/:pid/audit', owner: 'A', phase: 'Phase 2 step 15' },
-  { method: 'GET', url: '/api/projects/:pid/audit/verify', owner: 'A', phase: 'Phase 2 step 11' },
-  // B's and C's control routes: 501 until their owners land them.
-  { method: 'POST', url: '/api/projects/:pid/snapshots', owner: 'C', phase: 'Phase 2 (C)' },
-  { method: 'GET', url: '/api/projects/:pid/releases', owner: 'C', phase: 'Phase 2 (C)' },
-  { method: 'POST', url: '/api/projects/:pid/releases', owner: 'C', phase: 'Phase 2 (C)' },
-  { method: 'POST', url: '/api/releases/:id/verify', owner: 'C', phase: 'Phase 2 (C)' },
-  { method: 'POST', url: '/api/releases/:id/deploy', owner: 'C', phase: 'Phase 2 (C)' },
-  { method: 'POST', url: '/api/projects/:pid/rollback', owner: 'C', phase: 'Phase 2 (C)' },
-  { method: 'GET', url: '/api/projects/:pid/deployments', owner: 'C', phase: 'Phase 2 (C)' },
-  { method: 'POST', url: '/api/projects/:pid/verifications', owner: 'C', phase: 'Phase 2 (C)' },
-  { method: 'GET', url: '/api/verifications/:id', owner: 'C', phase: 'Phase 2 (C)' },
-  { method: 'GET', url: '/api/artifacts/:file', owner: 'C', phase: 'Phase 2 (C)' },
-  { method: 'POST', url: '/api/projects/:pid/drift/check', owner: 'B', phase: 'Phase 2 (B)' },
-  { method: 'GET', url: '/api/projects/:pid/drift', owner: 'B', phase: 'Phase 2 (B)' },
-  { method: 'POST', url: '/api/drift/:id/quarantine', owner: 'B', phase: 'Phase 2 (B)' },
-  { method: 'GET', url: '/api/bench', owner: 'B', phase: 'Phase 2 (B)' },
+/** Every A-owned control route that is still a stub until Phase 2 (steps 10-15).
+ *
+ * Ownership rule (fixes the duplicate-route boot failure on integration): Dev A
+ * registers ONLY A-owned routes here. Dev B and Dev C register their own routes -
+ * including their own 501 stubs if they want them - inside their own register*
+ * functions (drift/index.ts, snapshots/, verify/, releases/, gateway/). If Dev A
+ * pre-registers another dev's routes here, Fastify throws FST_ERR_DUPLICATED_ROUTES
+ * at boot the moment the owner lands the real route. Unregistered routes answer with
+ * the 404 ApiError response from setNotFoundHandler below. */
+export const STUB_ROUTES: Array<Pick<RouteOptions, 'method' | 'url'> & { phase: string }> = [
+  { method: 'GET', url: '/api/projects/:pid/patches', phase: 'Phase 2 step 12' },
+  { method: 'POST', url: '/api/projects/:pid/patches', phase: 'Phase 2 step 12' },
+  { method: 'GET', url: '/api/patches/:id', phase: 'Phase 2 step 12' },
+  { method: 'PUT', url: '/api/patches/:id', phase: 'Phase 2 step 12' },
+  { method: 'POST', url: '/api/patches/:id/validate', phase: 'Phase 2 step 10' },
+  { method: 'POST', url: '/api/patches/:id/submit', phase: 'Phase 2 step 12' },
+  { method: 'POST', url: '/api/patches/:id/reviews', phase: 'Phase 2 step 12' },
+  { method: 'POST', url: '/api/patches/:id/merge', phase: 'Phase 2 step 13' },
+  { method: 'POST', url: '/api/projects/:pid/conflicts', phase: 'Phase 2 step 13' },
+  { method: 'POST', url: '/api/projects/:pid/previews', phase: 'Phase 2 step 14' },
+  { method: 'PUT', url: '/api/previews/:id', phase: 'Phase 2 step 14' },
+  { method: 'GET', url: '/api/projects/:pid/audit', phase: 'Phase 2 step 15' },
+  { method: 'GET', url: '/api/projects/:pid/audit/verify', phase: 'Phase 2 step 11' },
 ];
 
 export function buildControlApp(opts: AppOptions): FastifyInstance {
@@ -153,7 +146,7 @@ export function buildControlApp(opts: AppOptions): FastifyInstance {
     };
   });
 
-  // --- stub routes (501, ApiError shape) ------------------------------------
+  // --- stub routes (501, ApiError shape); A-owned only (see STUB_ROUTES comment) --
   for (const route of STUB_ROUTES) {
     app.route({
       method: route.method,
@@ -161,7 +154,7 @@ export function buildControlApp(opts: AppOptions): FastifyInstance {
       handler: () => {
         throw new AppError(
           'NOT_IMPLEMENTED',
-          `${route.method} ${route.url} arrives in ${route.phase} (owner: Dev ${route.owner})`,
+          `${route.method} ${route.url} arrives in ${route.phase} (owner: Dev A)`,
         );
       },
     });
