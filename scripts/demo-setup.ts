@@ -1,9 +1,10 @@
 // scripts/demo-setup.ts (owner: Dev A) - PLAN 13.3 step 15, through the real HTTP API only.
 // Needs running servers (npm run target + npm start) on a fresh `npm run reset`.
-// Creates P1 "Fix checkout button", P2 "Fix price typo", P3 "Hide expired promo" (submitted,
-// approved, merged), freezes R1, verifies it, deploys it and waits for its health run.
-// P4 "Restyle checkout button" (pointer-events: none, same check as P1) is left approved, not merged,
-// so the demo can merge it, release R2, force-deploy and watch the automatic rollback.
+// The checkout button stays broken: the presenter fixes it live in the Studio.
+// Seeds R1 = "Fix price typo" (Adnan) + "Hide expired promo" (Gaurav): merged, verified, deployed,
+// healthy. "Restyle checkout button" (Adnan, pointer-events: none) is approved, not merged, for the
+// bad-release step. "Send checkout to the cart summary" (Adnan) is in review: another click fix on the
+// same button, so it conflicts (SAME_PROPERTY) with the presenter's checkout fix once that merges.
 import { readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -59,20 +60,8 @@ const checkoutCheck = [
 
 const PATCHES = [
   {
-    key: 'P1',
-    author: 'usr_dev1',
-    title: 'Fix checkout button',
-    description: 'The checkout button calls an undefined startChekout(); send shoppers to /checkout instead.',
-    urlPath: '/cart',
-    anchors: { a1: checkoutBtn },
-    ops: [{ kind: 'setBehavior', target: { anchor: 'a1' }, event: 'click', mode: 'replace', action: { type: 'navigate', url: '/checkout' } }],
-    checks: checkoutCheck,
-    baseValues: {},
-    merge: true,
-  },
-  {
-    key: 'P2',
-    author: 'usr_dev1',
+    key: 'price',
+    author: 'usr_dev2',
     title: 'Fix price typo',
     description: 'USB-C Hub shows ₹12,99; the real price is ₹1,299.',
     urlPath: '/',
@@ -80,11 +69,11 @@ const PATCHES = [
     ops: [{ kind: 'setText', target: { anchor: 'a1' }, value: '₹1,299' }],
     checks: [{ action: 'expectText', target: 'anchor:a1', contains: '₹1,299' }],
     baseValues: { 0: '₹12,99' },
-    merge: true,
+    stage: 'merged',
   },
   {
-    key: 'P3',
-    author: 'usr_dev2',
+    key: 'promo',
+    author: 'usr_dev1',
     title: 'Hide expired promo',
     description: 'The Diwali sale banner ended on 31 Oct 2025.',
     urlPath: '/',
@@ -92,19 +81,31 @@ const PATCHES = [
     ops: [{ kind: 'hide', target: { anchor: 'a1' } }],
     checks: [{ action: 'expectHidden', target: 'anchor:a1' }],
     baseValues: {},
-    merge: true,
+    stage: 'merged',
   },
   {
-    key: 'P4',
+    key: 'restyle',
     author: 'usr_dev2',
     title: 'Restyle checkout button',
-    description: 'Demo regression: pointer-events: none makes the checkout button unclickable.',
+    description: 'Flattens the checkout button. It also sets pointer-events: none, which makes it unclickable.',
     urlPath: '/cart',
     anchors: { a1: checkoutBtn },
     ops: [{ kind: 'setStyle', target: { anchor: 'a1' }, property: 'pointer-events', value: 'none' }],
     checks: checkoutCheck,
     baseValues: {},
-    merge: false,
+    stage: 'approved',
+  },
+  {
+    key: 'summary',
+    author: 'usr_dev2',
+    title: 'Send checkout to the cart summary',
+    description: 'Scrolls to the order summary instead of leaving the cart.',
+    urlPath: '/cart',
+    anchors: { a1: checkoutBtn },
+    ops: [{ kind: 'setBehavior', target: { anchor: 'a1' }, event: 'click', mode: 'replace', action: { type: 'navigate', url: '/cart#summary' } }],
+    checks: [],
+    baseValues: {},
+    stage: 'in_review',
   },
 ];
 
@@ -116,16 +117,18 @@ if (existing.items.length > 0) {
 
 const created: Record<string, Patch> = {};
 for (const p of PATCHES) {
-  const { key, author, merge, ...body } = p;
+  const { key, author, stage, ...body } = p;
   const patch = await api<Patch>('POST', `/api/projects/${PROJECT}/patches`, author, { ...body, baseSnapshotId: null });
   await api('POST', `/api/patches/${patch.id}/submit`, author);
-  await api('POST', `/api/patches/${patch.id}/reviews`, 'usr_rev', { decision: 'approve', comment: 'Looks right.' });
-  if (merge) await api('POST', `/api/patches/${patch.id}/merge`, 'usr_rev', { choices: [] });
+  if (stage !== 'in_review') {
+    await api('POST', `/api/patches/${patch.id}/reviews`, 'usr_rev', { decision: 'approve', comment: 'Looks right.' });
+  }
+  if (stage === 'merged') await api('POST', `/api/patches/${patch.id}/merge`, 'usr_rev', { choices: [] });
   created[key] = patch;
-  console.log(`[demo:setup] ${key} ${patch.id} "${p.title}" -> ${merge ? 'merged' : 'approved (not merged)'}`);
+  console.log(`[demo:setup] "${p.title}" -> ${stage.replace('_', ' ')}`);
 }
 
-const r1 = await api<Release>('POST', `/api/projects/${PROJECT}/releases`, 'usr_rm', { note: 'R1: checkout, price typo, expired promo' });
+const r1 = await api<Release>('POST', `/api/projects/${PROJECT}/releases`, 'usr_rm', { note: 'Price typo and expired promo' });
 console.log(`[demo:setup] R${r1.number} ${r1.id} created; verifying...`);
 const run = await api<Run>('POST', `/api/releases/${r1.id}/verify`, 'usr_rm');
 const finished = await poll(
@@ -146,4 +149,4 @@ const health = await poll(
 );
 console.log(`[demo:setup] deployment ${health.status}`);
 if (health.status !== 'healthy') process.exit(1);
-console.log(`[demo:setup] done. Live: http://localhost:4100/cart  ·  P4 ${created.P4!.id} is approved and waiting to be merged.`);
+console.log('[demo:setup] done. The checkout button is still broken on http://localhost:4100/cart - fix it in the Studio.');

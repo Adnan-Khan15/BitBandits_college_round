@@ -2,10 +2,10 @@
 // The deterministic fixture data every environment shares (PLAN section 17):
 // four users and the one ShopLite project. Used by scripts/seed.ts and tests.
 export const SEED_USERS = [
-  { id: 'usr_dev1', name: 'Developer 1', role: 'developer' },
-  { id: 'usr_dev2', name: 'Developer 2', role: 'developer' },
-  { id: 'usr_rev', name: 'Reviewer', role: 'reviewer' },
-  { id: 'usr_rm', name: 'Release Manager', role: 'release_manager' },
+  { id: 'usr_dev1', name: 'Gaurav', role: 'developer' },
+  { id: 'usr_dev2', name: 'Adnan', role: 'developer' },
+  { id: 'usr_rev', name: 'Vishwaa', role: 'reviewer' },
+  { id: 'usr_rm', name: 'Kshant', role: 'release_manager' },
 ] as const;
 
 export const SEED_PROJECT = {
