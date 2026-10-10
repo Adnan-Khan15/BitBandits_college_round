@@ -8,7 +8,8 @@
 #   patchwork install    put the 'patchwork' command on your PATH (a symlink in /opt/homebrew/bin,
 #                        /usr/local/bin or ~/.local/bin).
 #
-# Services: ShopLite upstream :4200, control :4000, live :4100, preview :4300, UI :5173, Ollama :11434.
+# Services: ShopLite :4200, Chai & Code Café (sample site to connect) :5500, control :4000, live :4100,
+# preview :4300, UI :5173, Ollama :11434.
 # Logs: data/logs/<service>.log   (PATCHWORK_NO_OPEN=1 skips opening the browser)
 set -u
 
@@ -17,7 +18,7 @@ SELF="$(realpath "$0" 2>/dev/null || echo "$0")"
 cd "$(dirname "$SELF")" || exit 1
 ROOT="$(pwd)"
 LOGS="$ROOT/data/logs"
-PORTS="4000 4100 4200 4300 5173"
+PORTS="4000 4100 4200 4300 5173 5500"
 UI="http://localhost:5173"
 OLLAMA_URL="http://localhost:11434"
 MODEL="${PW_ASSIST_MODEL:-qwen3:4b}"
@@ -177,6 +178,8 @@ start_ollama
 
 start_bg target npm run target
 wait_for http://localhost:4200/ "ShopLite upstream" 20
+start_bg sample node fixtures/sample-site/server.mjs
+wait_for http://localhost:5500/ "Chai & Code Café (sample site to connect)" 20
 start_bg server npx tsx apps/server/src/main.ts # already built above
 wait_for http://localhost:4000/api/users "PATCHWORK server" 90
 start_bg web npm run dev:web
@@ -194,6 +197,7 @@ cat <<EOF
     UI (use this for the demo)   $UI
     Raw shop (broken checkout)   http://localhost:4200/cart
     Live through PATCHWORK       http://localhost:4100/cart
+    Sample site to connect       http://localhost:5500  (Sites > Connect the sample site)
 
   Logs: $LOGS
   Press Ctrl+C here to stop everything, Ollama included (or run 'patchwork stop' elsewhere).

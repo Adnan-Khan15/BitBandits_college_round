@@ -120,6 +120,22 @@ over HTTP (preview isolation, review, merge conflict, verified deploy, rollback,
 Before a real demo, set the upstream back to v1 and reset:
 `curl -X POST localhost:4200/__upstream/version -H 'content-type: application/json' -d '{"version":"v1"}' && npm run reset`.
 
+### Connect your own site
+
+1. Run your site where PATCHWORK can reach it: a dev server (`npm run dev`, e.g. `http://localhost:3000`), a
+   static build served locally, or a public `https://` address you own. No code change, SDK or rebuild.
+2. In PATCHWORK: **Sites → Connect a site** with a name, the address (no path) and the pages to track
+   (`/ /pricing`), as Kshant (release manager).
+3. **Switch to this site**: the live gateway (`localhost:4100`) and preview (`localhost:4300`) now serve your site,
+   and the Studio, Review, Ship, Drift Sentinel and History work on it. Fixes reach `localhost:4100` only after
+   Review and Ship; your own server never changes.
+
+Pages built by JavaScript (React, Vue, Vite, Next) are rendered in headless Chromium for the AI, the conflict
+check and Drift Sentinel. Sites that forbid embedding still work: the gateway adapts their framing headers and CSP.
+To try it without your own project, click **Connect the sample site** on Sites: Chai & Code Café runs on
+`localhost:5500` (started by `patchwork`) with a broken "Book a table" button, an expired notice and a wrong phone
+number.
+
 ### Deliberate cuts in this build
 
 | Planned | This build |
