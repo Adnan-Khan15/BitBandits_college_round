@@ -89,7 +89,7 @@ export function requireUser(db: Db, userId: string | undefined): User {
   return { id: row.id, name: row.name, role: row.role as Role };
 }
 
-function requireReviewer(user: User, patch: Patch): void {
+export function requireReviewer(user: User, patch: Patch): void {
   if (user.role !== 'reviewer' && user.role !== 'release_manager') {
     throw new AppError('FORBIDDEN', `Role ${user.role} cannot review or merge patches`, { role: user.role });
   }
@@ -325,3 +325,54 @@ export function addReview(
 
 /** Merge (step 13) needs the candidate's body; kept here so both modules agree. */
 export { bodyOf as patchBodyOf };
+
+/**
+ * Drift heal (PLAN 11.13, step 14): a NEW revision of a patch with refreshed anchors,
+ * moved to in_review with its mergedRevision preserved so head keeps the live revision
+ * until the heal is reviewed and merged. The actor may be 'system' (a poller).
+ *
+ * Audits `patch.heal_proposed` with the caller's note (PLAN 11.13/step 14). Dev B's
+ * drift.check also appends the same event -> duplicate; open change request A-drift-1
+ * asks Dev B to drop his append (the plan assigns the audit to proposeHeal).
+ */
+export function proposeHeal(
+  db: Db,
+  audit: AuditService,
+  id: string,
+  anchors: PatchBody['anchors'],
+  actorId: string | 'system',
+  note: string,
+): Patch {
+  const row = db.prepare('SELECT * FROM patches WHERE id = ?').get(id) as PatchRow | undefined;
+  if (!row) throw new AppError('NOT_FOUND', `No patch ${id}`);
+  const patch = rowToPatch(row);
+  if (patch.mergedRevision === null) {
+    throw new AppError('INVALID_STATE', `Patch ${id} has never been merged; nothing to heal`, {
+      status: patch.status,
+    });
+  }
+  if (actorId !== 'system') requireUser(db, actorId); // unknown actor -> 403
+
+  const nextBody: PatchBody = { ...bodyOf(patch), anchors };
+  const nextRevision = patch.revision + 1;
+  const now = new Date().toISOString();
+
+  // Append-only history: archive the revision being replaced.
+  db.prepare(
+    'INSERT OR REPLACE INTO patch_revisions (patch_id, revision, title, body_json, author_id, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+  ).run(patch.id, patch.revision, patch.title, row.body_json, actorId, patch.createdAt);
+
+  db.prepare(
+    "UPDATE patches SET revision = ?, status = 'in_review', body_json = ?, updated_at = ? WHERE id = ?",
+  ).run(nextRevision, JSON.stringify(nextBody), now, id);
+
+  audit.append({
+    projectId: patch.projectId,
+    type: 'patch.heal_proposed',
+    actorId,
+    subject: { type: 'patch', id },
+    data: { revision: nextRevision, previousRevision: patch.revision, note },
+  });
+
+  return getPatchOrThrow(db, id);
+}

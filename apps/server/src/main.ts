@@ -24,10 +24,11 @@ async function main(): Promise<void> {
   const db: Db = openDb(env.PW_DB_PATH);
   migrate(db);
 
-  const registry = buildRegistry(db);
+  const previewConfig = { editorOrigin: env.PW_EDITOR_ORIGIN, previewOrigin: env.PW_PREVIEW_ORIGIN };
+  const registry = buildRegistry(db, previewConfig);
 
   // Control plane (:4000)
-  const control = buildControlApp({ registry, db, logger: true });
+  const control = buildControlApp({ registry, db, logger: true, previewOrigin: env.PW_PREVIEW_ORIGIN });
   await control.listen({ port: env.PW_CONTROL_PORT, host: '127.0.0.1' });
 
   // Serve the built web app in start mode (PLAN section 17: npm run build && npm start).

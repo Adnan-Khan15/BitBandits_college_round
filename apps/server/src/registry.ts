@@ -9,14 +9,16 @@ import { createSnapshotService } from './snapshots/index.js';
 import { createVerifyService } from './verify/index.js';
 import { createReleaseService } from './releases/index.js';
 import { createDriftService } from './drift/index.js';
+import { DEFAULT_PREVIEW_CONFIG, type PreviewConfig } from './core/previews.js';
 
-export function buildRegistry(db: Db): ServiceRegistry {
+export function buildRegistry(db: Db, previewConfig: PreviewConfig = DEFAULT_PREVIEW_CONFIG): ServiceRegistry {
   const registry = {} as ServiceRegistry;
   registry.audit = createAuditService(db);
-  registry.core = createCoreService(db);
+  // core receives the registry (read lazily at call time) for audit + previews + head.
+  registry.core = createCoreService(db, registry, previewConfig);
   registry.snapshots = createSnapshotService();
   registry.verify = createVerifyService();
-  registry.releases = createReleaseService();
+  registry.releases = createReleaseService(db);
   // Dev B handoff (per PLAN 13.4): the drift service reaches the registry (snapshots,
   // releases, core.proposeHeal) and the db (drift_reports) through these arguments.
   registry.drift = createDriftService(registry, db);
