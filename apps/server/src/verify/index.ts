@@ -350,6 +350,11 @@ export function createVerifyService(db: Db, registry: ServiceRegistry, env: Env 
       const b = await browser();
       const newContext = async (): Promise<{ context: BrowserContext; errors: string[] }> => {
         const context = await b.newContext({ viewport: VIEWPORT, reducedMotion: 'reduce' });
+        // No "PATCHWORK preview" badge in verification screenshots (the runtime honours this cookie).
+        await context.addCookies([
+          { name: 'pw_nobadge', value: '1', url: previewOrigin },
+          { name: 'pw_nobadge', value: '1', url: liveOrigin },
+        ]);
         contexts.push(context);
         return { context, errors: captureErrors(context) };
       };
