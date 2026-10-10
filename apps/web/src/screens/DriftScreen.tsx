@@ -110,6 +110,8 @@ export function DriftScreen() {
   if (!data?.project) return <EmptyState>No project yet. Run <code>./demo.sh</code> to seed ShopLite.</EmptyState>;
 
   const { project, reports, explain, releases, users, bench, version } = data;
+  // the v1/v2 redesign switch belongs to the ShopLite demo server; other sites are checked as they are
+  const isShopLite = project.upstreamOrigin.replace('127.0.0.1', 'localhost') === TARGET_ORIGIN.replace('127.0.0.1', 'localhost');
   const rm = personFor(users, 'release_manager');
   const rmName = rm?.name ?? 'the release manager';
   const safeRelease = safe ? (releases.find((r) => r.id === safe.id) ?? safe) : null;
@@ -119,7 +121,7 @@ export function DriftScreen() {
     setError(null);
     setSafe(null);
     const list: DrillStep[] = [
-      { label: 'ShopLite redesigns its site (v2)', state: 'todo', detail: '' },
+      { label: isShopLite ? 'ShopLite redesigns its site (v2)' : `Use ${project.name}'s current pages`, state: 'todo', detail: '' },
       { label: 'Check every live fix against the new pages', state: 'todo', detail: '' },
       { label: 'Build a safe release without the broken fixes', state: 'todo', detail: '' },
       { label: 'Test the safe release in a real browser', state: 'todo', detail: '' },
@@ -131,8 +133,12 @@ export function DriftScreen() {
     setSteps([...list]);
     try {
       set(0, 'running');
-      if (version !== 'v2') await setUpstream('v2');
-      set(0, 'done', 'the shop deployed its redesign; its own code changed, ours did not');
+      if (isShopLite) {
+        if (version !== 'v2') await setUpstream('v2');
+        set(0, 'done', 'the shop deployed its redesign; its own code changed, ours did not');
+      } else {
+        set(0, 'done', `checking ${project.name} as it is now (the redesign switch is ShopLite's demo control)`);
+      }
 
       set(1, 'running');
       const checked = (await api.driftCheck(project.id)).items;
@@ -223,12 +229,19 @@ export function DriftScreen() {
           <button type="button" className="btn btn--patch btn--big" disabled={busy} onClick={() => void runDrill()}>
             {busy ? 'Running the drill…' : 'Run drift drill'}
           </button>
-          <button type="button" className="btn" disabled={busy || version === 'v1'} onClick={() => void restore()}>
-            Restore original site (v1)
-          </button>
-          <span className={styles.small}>
-            ShopLite is serving <strong>{version === 'v2' ? 'the redesign (v2)' : version === 'v1' ? 'the original (v1)' : 'nothing (not running?)'}</strong>
-          </span>
+          {isShopLite ? (
+            <>
+              <button type="button" className="btn" disabled={busy || version === 'v1'} onClick={() => void restore()}>
+                Restore original site (v1)
+              </button>
+              <span className={styles.small}>
+                ShopLite is serving{' '}
+                <strong>{version === 'v2' ? 'the redesign (v2)' : version === 'v1' ? 'the original (v1)' : 'nothing (not running?)'}</strong>
+              </span>
+            </>
+          ) : (
+            <span className={styles.small}>Checks every live fix on {project.name} against its pages as they are now.</span>
+          )}
         </div>
         {steps.length > 0 ? (
           <ol className={styles.steps} aria-live="polite">

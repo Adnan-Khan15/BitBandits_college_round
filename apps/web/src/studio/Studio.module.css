@@ -144,7 +144,13 @@
 .frameEmpty {
   display: grid;
   place-items: center;
-  color: var(--ink-3);
+  padding: 2rem;
+  color: var(--ink-2);
+  text-align: center;
+}
+
+.frameEmpty p {
+  max-width: 48ch;
 }
 
 .toast {

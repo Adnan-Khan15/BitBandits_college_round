@@ -17,9 +17,13 @@ export function formatWhen(iso: string): string {
 
 export const pct = (value: number): string => `${Math.round(value * 1000) / 10}%`;
 
-/** The one seeded project (the gateway serves PW_PROJECT_ID; the UI shows the first project). */
+/** The active site: the one the live and preview gateways serve now (chosen on the Sites screen). */
 export async function firstProject(): Promise<Project | null> {
-  return (await api.projects()).items[0] ?? null;
+  try {
+    return await api.activeProject();
+  } catch {
+    return null;
+  }
 }
 
 /** Human name of an anchor: its visible text, else its accessible name, else its tag. */

@@ -4,6 +4,7 @@ import { setCurrentUserId, useCurrentUserId } from '../user.js';
 import styles from './Header.module.css';
 
 export const NAV = [
+  { to: 'sites', label: 'Sites' },
   { to: 'studio', label: 'Studio' },
   { to: 'review', label: 'Review' },
   { to: 'ship', label: 'Ship' },

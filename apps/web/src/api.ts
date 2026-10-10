@@ -119,6 +119,11 @@ export const api = {
   users: () => request<{ items: User[] }>(apiPaths.users()),
 
   projects: () => request<{ items: Project[] }>(apiPaths.projects()),
+  /** The site the live and preview gateways serve now. */
+  activeProject: () => request<Project>('/api/active-project'),
+  framing: (pid: string) => request<{ framable: boolean }>(`/api/projects/${encodeURIComponent(pid)}/framing`),
+  setActiveProject: (projectId: string) => put<Project>('/api/active-project', { projectId }),
+  connectSite: (body: { name: string; upstreamOrigin: string; paths: string[] }) => post<Project>(apiPaths.projects(), body),
   project: (pid: string) => request<Project>(apiPaths.project(pid)),
 
   patches: (pid: string, status?: string) =>

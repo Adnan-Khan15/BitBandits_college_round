@@ -13,6 +13,7 @@ import { Chip, PatchStatusChip } from '../components/StatusChip.js';
 import { useCurrentUserId } from '../user.js';
 import { useRoute } from '../router.js';
 import { nameOf, useTeam } from '../team.js';
+import { firstProject } from '../screens/shared.js';
 import {
   ATTR_CHOICES,
   emptyForm,
@@ -48,7 +49,7 @@ export function StudioScreen() {
 
   /* --- the site: project, live release, my fixes (polled every 2 s) ------------------- */
   const { data: site } = usePoll<SiteState>(async () => {
-    const project = (await api.projects()).items[0] ?? null;
+    const project = await firstProject();
     if (!project) return { project: null, releases: [], deployments: [], patches: [] };
     const [releases, deployments, patches] = await Promise.all([
       api.releases(project.id),
@@ -62,6 +63,7 @@ export function StudioScreen() {
   const liveRelease = releases.find((r) => r.id === project?.liveReleaseId) ?? null;
 
   /* --- frames ---------------------------------------------------------------------------- */
+  const { data: framing } = usePoll(async () => (project ? api.framing(project.id) : null), 30000);
   const [tab, setTab] = useState<Tab>('preview');
   const [sideBySide, setSideBySide] = useState(false);
   const [path, setPath] = useState('/cart');
@@ -166,6 +168,12 @@ export function StudioScreen() {
     }, 350);
     return () => window.clearTimeout(handle);
   }, [project, preview, spec, specJson]);
+
+  // a site without /cart opens on its first tracked page
+  useEffect(() => {
+    if (project && !project.paths.includes(path)) setPath(project.paths.includes('/cart') ? '/cart' : (project.paths[0] ?? '/'));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [project?.id]);
 
   // opening a fix from Review jumps to the page it changes
   const fixPath = viewFixId ? (site?.patches ?? []).find((p) => p.id === viewFixId)?.urlPath ?? null : null;
@@ -279,6 +287,19 @@ export function StudioScreen() {
   const liveIds = new Set(liveRelease?.patches.map((p) => p.patchId) ?? []);
 
   const frameFor = (which: Tab) => {
+    if (which === 'original' && framing && !framing.framable && project) {
+      return (
+        <div className={styles.frameEmpty}>
+          <p>
+            {project.name}'s own server doesn't allow other pages to embed it, so its original can't be shown here.{' '}
+            <a href={`${project.upstreamOrigin}${path}`} target="_blank" rel="noreferrer">
+              Open the original in a new tab
+            </a>
+            . The Preview and Live tabs work because PATCHWORK serves them.
+          </p>
+        </div>
+      );
+    }
     if (which === 'preview') {
       return previewSrc ? (
         <iframe
@@ -292,7 +313,7 @@ export function StudioScreen() {
         <div className={styles.frameEmpty}>Opening the preview…</div>
       );
     }
-    const origin = which === 'live' ? LIVE_ORIGIN : TARGET_ORIGIN;
+    const origin = which === 'live' ? LIVE_ORIGIN : (project?.upstreamOrigin ?? TARGET_ORIGIN);
     return (
       <iframe
         key={`${which}-${liveKey}-${path}`}
@@ -309,7 +330,7 @@ export function StudioScreen() {
       ? `The live site plus “${viewedFix.title}”, the fix under review. Customers don't see it yet.`
       : picked ? 'Your fix, not shipped yet. Only you see this.' : 'The live site plus your unshipped fix. Only you see this.',
     live: `What customers see right now: ${liveRelease ? `release R${liveRelease.number}` : 'no release yet, the original site'}.`,
-    original: "ShopLite's own server. Its code is never changed.",
+    original: `${project?.name ?? 'The site'}'s own server, ${project?.upstreamOrigin ?? ''}. Its code is never changed.`,
   };
 
   return (
