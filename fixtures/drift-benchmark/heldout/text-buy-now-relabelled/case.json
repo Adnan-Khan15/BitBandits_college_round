@@ -1,0 +1,7 @@
+{
+  "id": "text-buy-now-relabelled",
+  "category": "text",
+  "targetBefore": "article[data-sku=\"KT1\"] .buy-now",
+  "expectedAfter": "article[data-sku=\"KT1\"] .buy-now",
+  "notes": "Two product cards sit side by side and BOTH Buy now buttons are relabelled to Purchase now, so visible text cannot identify the target on its own. The target is the button inside the card with data-sku KT1 (the first card); card order is identical in before and after. Selecting the second card's button is a wrong-target."
+}

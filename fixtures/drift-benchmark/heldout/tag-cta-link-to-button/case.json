@@ -1,0 +1,7 @@
+{
+  "id": "tag-cta-link-to-button",
+  "category": "tag",
+  "targetBefore": "#cta-signup",
+  "expectedAfter": "#cta-signup",
+  "notes": "Call-to-action changes element type: a[href] -> button, losing the href attribute. Id, class, text, parent and position are unchanged. Tag similarity should use the a/button related group rather than dropping to zero."
+}

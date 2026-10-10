@@ -1,0 +1,7 @@
+{
+  "id": "renamed-form-submit",
+  "category": "renamed",
+  "targetBefore": "#submitBtn",
+  "expectedAfter": "#form-submit",
+  "notes": "Form submit button; only the id changes. Tag, class, text, parent and position are unchanged."
+}

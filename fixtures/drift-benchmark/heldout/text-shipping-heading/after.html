@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Returns — Crafters Supply</title>
+</head>
+<body>
+  <header class="site-header">
+    <a class="logo" href="/">Crafters Supply</a>
+    <nav class="site-nav">
+      <a href="/">Shop</a>
+      <a href="/cart">Cart</a>
+      <a href="/help">Help</a>
+    </nav>
+  </header>
+
+  <main class="container container--narrow">
+    <h1 class="page-title">Start a return</h1>
+    <p class="page-subtitle">We collect the item within 7 days of approval.</p>
+
+    <form class="panel" id="returns-form" novalidate>
+      <section class="form-section">
+        <h2 class="section-title" id="shipping-heading">Delivery details</h2>
+        <div class="field">
+          <label class="field__label" for="order-number">Order number</label>
+          <input class="field__input" id="order-number" name="order" type="text" placeholder="#CS-1042">
+        </div>
+        <div class="field">
+          <label class="field__label" for="pickup-address">Pickup address</label>
+          <textarea class="field__input" id="pickup-address" name="address" rows="3"></textarea>
+        </div>
+      </section>
+
+      <section class="form-section">
+        <h2 class="section-title" id="reason-heading">Reason</h2>
+        <div class="field">
+          <label class="field__label" for="reason-note">What went wrong?</label>
+          <textarea class="field__input" id="reason-note" name="reason" rows="3"></textarea>
+        </div>
+      </section>
+
+      <div class="form-actions">
+        <button class="button button--primary" id="continue-btn" type="submit">Continue</button>
+      </div>
+    </form>
+  </main>
+
+  <footer class="site-footer">© 2026 Crafters Supply</footer>
+</body>
+</html>

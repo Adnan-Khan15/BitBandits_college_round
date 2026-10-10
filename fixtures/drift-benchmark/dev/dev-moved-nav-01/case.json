@@ -1,0 +1,7 @@
+{
+  "id": "dev-moved-nav-01",
+  "category": "moved",
+  "targetBefore": ".nav-link--account",
+  "expectedAfter": ".nav-link--account",
+  "notes": "Account link moved out of the top nav into a dropdown menu list item; classes, href and text unchanged. Expected: relocated via ancestors/xpath/siblingIndex features."
+}

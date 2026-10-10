@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Cache invalidation, from first principles — Field Notes</title>
+</head>
+<body>
+  <header class="site-header">
+    <a class="logo" href="/">Field Notes</a>
+    <nav class="site-nav">
+      <a href="/">Home</a>
+      <a href="/archive">Archive</a>
+      <a href="/about">About</a>
+    </nav>
+  </header>
+
+  <div class="layout">
+    <main class="container">
+      <article class="post">
+        <h1 class="post-title">Cache invalidation, from first principles</h1>
+        <div class="post-body">
+          <p>There are two hard problems in computer science: cache invalidation, naming things, and off-by-one errors. This post is about the first one, and why keys matter more than eviction policies.</p>
+          <p>A good cache key makes staleness impossible to express. Everything else is an optimisation.</p>
+        </div>
+        <p class="byline">By Aarohi Sharma · 21 Sep 2026</p>
+      </article>
+
+      <section class="comments">
+        <h2 class="comments-title">Comments</h2>
+        <ul class="comment-list">
+          <li class="comment">
+            <p class="comment-text">Keys as content hashes fixed three of our bugs last quarter.</p>
+            <p class="comment-author">— Ishaan</p>
+          </li>
+        </ul>
+      </section>
+    </main>
+
+    <aside class="sidebar">
+      <section class="sidebar-block">
+        <h3 class="sidebar-title">Related</h3>
+        <ul class="sidebar-list">
+          <li><a href="/posts/hashing-everything">Hashing everything</a></li>
+        </ul>
+      </section>
+    </aside>
+  </div>
+
+  <footer class="site-footer">© 2026 Field Notes</footer>
+</body>
+</html>

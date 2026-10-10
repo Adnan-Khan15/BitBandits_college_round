@@ -1,0 +1,7 @@
+{
+  "id": "moved-add-to-cart",
+  "category": "moved",
+  "targetBefore": ".add-to-cart--hero",
+  "expectedAfter": ".add-to-cart--hero",
+  "notes": "Shop grid; the hero card's add-to-cart button keeps its classes and text but moves from the card body into a new product-card__footer. The two other add-to-cart buttons keep their position, so ancestors and sibling index must carry the match."
+}

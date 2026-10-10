@@ -1,0 +1,7 @@
+{
+  "id": "dev-moved-parent-01",
+  "category": "moved",
+  "targetBefore": "#checkout-btn",
+  "expectedAfter": "#checkout-btn",
+  "notes": "Button moved from div.cart-summary into a new footer.cart-bar; id, classes and text unchanged. Expected: relocated via ancestors/xpath/neighbour-text features."
+}
