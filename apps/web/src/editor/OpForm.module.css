@@ -1,0 +1,53 @@
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: flex-end;
+}
+
+.row label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: var(--fs-s);
+  color: var(--ink-2);
+  min-width: 12rem;
+  flex: 1;
+}
+
+.row select,
+.row input,
+.row textarea {
+  font: inherit;
+  padding: 0.3rem 0.4rem;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.row textarea {
+  min-height: 3.5rem;
+  resize: vertical;
+}
+
+.hint {
+  margin: 0;
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+  flex-basis: 100%;
+}
+
+.kind {
+  font-size: var(--fs-xs);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 0 0.3rem;
+  background: var(--neutral-soft);
+}

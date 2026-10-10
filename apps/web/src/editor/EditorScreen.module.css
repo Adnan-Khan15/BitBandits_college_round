@@ -1,0 +1,233 @@
+.editor {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.meta {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.fields {
+  display: flex;
+  gap: 1.25rem;
+  flex-wrap: wrap;
+}
+
+.fields label,
+.description {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: var(--fs-s);
+  color: var(--ink-2);
+}
+
+.fields label {
+  flex: 1;
+  min-width: 14rem;
+}
+
+.fields input,
+.description textarea {
+  font: inherit;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+  gap: 1.5rem;
+  align-items: start;
+}
+
+.previewColumn {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  min-width: 0;
+}
+
+.previewBar {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.previewHint {
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+  flex: 1;
+}
+
+.preview {
+  width: 100%;
+  height: 26rem;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.previewEmpty {
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius);
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  align-items: flex-start;
+}
+
+.resolver {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  font-size: var(--fs-s);
+  color: var(--ink-2);
+  flex-wrap: wrap;
+}
+
+.resolver label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.runtimeStatus {
+  margin: 0;
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+}
+
+.panelColumn {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  min-width: 0;
+}
+
+.panel {
+  border-top: 1px solid var(--line-strong);
+  padding-top: 0.75rem;
+}
+
+.panel h2 {
+  font-size: var(--fs-s);
+  color: var(--ink-2);
+  margin-bottom: 0.5rem;
+}
+
+.anchors {
+  list-style: none;
+  margin: 0 0 0.6rem;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: var(--fs-s);
+}
+
+.ops {
+  margin: 0 0 0.75rem;
+  padding-left: 1.2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: var(--fs-s);
+}
+
+.ops li {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.addOp {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  align-items: flex-start;
+}
+
+.addOp > label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: var(--fs-s);
+  color: var(--ink-2);
+}
+
+.addOp select {
+  font: inherit;
+  padding: 0.2rem 0.35rem;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.saveBar {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  border-top: 1px solid var(--line-strong);
+  padding-top: 0.9rem;
+}
+
+.saved {
+  font-size: var(--fs-s);
+  color: var(--healthy);
+}
+
+.saveError {
+  flex-basis: 100%;
+}
+
+.validation h2 {
+  font-size: var(--fs-s);
+  color: var(--ink-2);
+  margin-bottom: 0.4rem;
+}
+
+.issues {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: var(--fs-s);
+}
+
+.issueError {
+  color: var(--broken);
+}
+
+.issueWarn {
+  color: var(--atrisk);
+}
+
+.loading {
+  color: var(--ink-2);
+}
+
+@media (max-width: 1100px) {
+  .workspace {
+    grid-template-columns: 1fr;
+  }
+}
