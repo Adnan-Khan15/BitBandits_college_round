@@ -178,7 +178,9 @@ export async function mergePatch(
   // Append to head. A candidate_overrides choice is exactly "apply the candidate after
   // the existing conflicting patch", which is what appending does (latest apply wins).
   const maxOrder = db
-    .prepare("SELECT COALESCE(MAX(merge_order), 0) AS m FROM patches WHERE project_id = ? AND status = 'merged'")
+    .prepare(
+      'SELECT COALESCE(MAX(merge_order), 0) AS m FROM patches WHERE project_id = ? AND merge_order IS NOT NULL',
+    )
     .get(patch.projectId) as { m: number };
   const mergeOrder = maxOrder.m + 1;
   const now = new Date().toISOString();

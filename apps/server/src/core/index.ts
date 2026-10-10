@@ -1,12 +1,27 @@
 // apps/server/src/core/index.ts (owner: Dev A)
-// Phase 2 step 12: CoreService (PLAN 11.13). Projects, patches and head are real;
-// previews and proposeHeal arrive in step 14.
-import type { FrozenPatch, Patch, Preview, Project, RuntimeManifest } from '@patchwork/shared';
-import type { CoreService } from '@patchwork/shared';
-import type { ElementFingerprint, Id, PreviewSpec } from '@patchwork/shared';
-import { AppError } from '@patchwork/shared';
+// CoreService (PLAN 11.13): projects, patches and head (step 12), previews and the
+// drift heal (step 14).
+import type {
+  CoreService,
+  ElementFingerprint,
+  FrozenPatch,
+  Id,
+  Patch,
+  Preview,
+  PreviewSpec,
+  Project,
+  RuntimeManifest,
+  ServiceRegistry,
+} from '@patchwork/shared';
 import type { Db } from '../db/sqlite.js';
-import { getPatch } from './patches.js';
+import { getPatch, proposeHeal as proposeHealRevision } from './patches.js';
+import {
+  buildManifest,
+  createPreviewRow,
+  getPreviewRow,
+  type PreviewConfig,
+  DEFAULT_PREVIEW_CONFIG,
+} from './previews.js';
 
 type ProjectRow = {
   id: string;
@@ -28,11 +43,21 @@ function rowToProject(r: ProjectRow): Project {
   };
 }
 
-const notYet = (fn: string): never => {
-  throw new AppError('NOT_IMPLEMENTED', `core.${fn} arrives in Phase 2 step 14 (owner: Dev A)`);
+type HeadRow = {
+  id: string;
+  revision: number;
+  merged_revision: number;
+  title: string;
+  body_json: string;
+  rev_body_json: string | null;
+  rev_title: string | null;
 };
 
-export function createCoreService(db: Db): CoreService {
+export function createCoreService(
+  db: Db,
+  registry: ServiceRegistry,
+  config: PreviewConfig = DEFAULT_PREVIEW_CONFIG,
+): CoreService {
   return {
     getProject(id: Id): Project | null {
       const row = db.prepare('SELECT * FROM projects WHERE id = ?').get(id) as ProjectRow | undefined;
@@ -43,51 +68,48 @@ export function createCoreService(db: Db): CoreService {
       return getPatch(db, id);
     },
 
-    // Merged revisions in merge order = head (PLAN 11.3).
+    // Merged revisions in merge order = head (PLAN 11.3). A patch edited or healed after a
+    // merge keeps merge_order/merged_revision, and its merged body is read from the archived
+    // revision row so head keeps serving the live revision until the new one is merged.
     listHead(projectId: Id): FrozenPatch[] {
       const rows = db
         .prepare(
-          'SELECT * FROM patches WHERE project_id = ? AND status = ? AND merge_order IS NOT NULL ORDER BY merge_order',
+          `SELECT p.id, p.revision, p.merged_revision, p.title, p.body_json,
+                  r.body_json AS rev_body_json, r.title AS rev_title
+           FROM patches p
+           LEFT JOIN patch_revisions r ON r.patch_id = p.id AND r.revision = p.merged_revision
+           WHERE p.project_id = ? AND p.merge_order IS NOT NULL AND p.merged_revision IS NOT NULL
+           ORDER BY p.merge_order`,
         )
-        .all(projectId, 'merged') as Array<{
-        id: string;
-        revision: number;
-        merged_revision: number | null;
-        title: string;
-        body_json: string;
-      }>;
+        .all(projectId) as HeadRow[];
       return rows.map((r) => {
-        const body = JSON.parse(r.body_json) as Omit<FrozenPatch, 'patchId' | 'revision' | 'title'>;
-        return { ...body, patchId: r.id, revision: r.merged_revision ?? r.revision, title: r.title };
+        const archived = r.merged_revision !== r.revision && r.rev_body_json !== null;
+        const json = (archived ? r.rev_body_json : r.body_json) as string;
+        const title = archived ? (r.rev_title ?? r.title) : r.title;
+        const body = JSON.parse(json) as Omit<FrozenPatch, 'patchId' | 'revision' | 'title'>;
+        return { ...body, patchId: r.id, revision: r.merged_revision, title };
       });
     },
 
-    createPreview: (_projectId: Id, _spec: PreviewSpec, _actorId: Id): Preview =>
-      notYet('createPreview'),
-
-    getPreview: (id: Id): Preview | null => {
-      const row = db
-        .prepare('SELECT * FROM previews WHERE id = ?')
-        .get(id) as { id: string; project_id: string; spec_json: string; created_by: string; created_at: string; expires_at: string } | undefined;
-      if (!row) return null;
-      return {
-        id: row.id,
-        projectId: row.project_id,
-        spec: JSON.parse(row.spec_json) as PreviewSpec,
-        createdBy: row.created_by,
-        createdAt: row.created_at,
-        expiresAt: row.expires_at,
-      };
+    createPreview(projectId: Id, spec: PreviewSpec, actorId: Id): Preview {
+      return createPreviewRow(db, registry, projectId, spec, actorId);
     },
 
-    manifestForPreview: (_previewId: Id): RuntimeManifest => notYet('manifestForPreview'),
+    getPreview(id: Id): Preview | null {
+      return getPreviewRow(db, id);
+    },
 
-    // Drift heal (PLAN 11.13): lands in step 14 with previews.
-    proposeHeal: (
-      _patchId: Id,
-      _anchors: Record<string, ElementFingerprint>,
-      _actorId: Id | 'system',
-      _note: string,
-    ): Patch => notYet('proposeHeal'),
+    manifestForPreview(previewId: Id): RuntimeManifest {
+      return buildManifest(db, registry, config, previewId);
+    },
+
+    proposeHeal(
+      patchId: Id,
+      anchors: Record<string, ElementFingerprint>,
+      actorId: Id | 'system',
+      note: string,
+    ): Patch {
+      return proposeHealRevision(db, registry.audit, patchId, anchors, actorId, note);
+    },
   };
 }

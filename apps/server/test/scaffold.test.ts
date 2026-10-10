@@ -55,12 +55,14 @@ describe('scaffold', () => {
     await app.close();
   });
 
-  it('answers A-owned stub routes with 501 NOT_IMPLEMENTED in the ApiError shape', async () => {
+  it('has no A-owned stub routes left (all A routes are real)', async () => {
+    expect(STUB_ROUTES).toEqual([]);
+    // The previews route is real now: with no user header it is a 403, not a 501 stub.
     const app = buildControlApp({ registry: buildRegistry(db), db });
     const res = await app.inject({ method: 'POST', url: '/api/projects/prj_nope/previews' });
-    expect(res.statusCode).toBe(501);
+    expect(res.statusCode).toBe(403);
     const body = res.json() as { error: { code: string; requestId: string } };
-    expect(body.error.code).toBe('NOT_IMPLEMENTED');
+    expect(body.error.code).toBe('FORBIDDEN');
     expect(typeof body.error.requestId).toBe('string');
     await app.close();
   });

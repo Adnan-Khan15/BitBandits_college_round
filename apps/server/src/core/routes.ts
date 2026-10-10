@@ -1,13 +1,14 @@
 // apps/server/src/core/routes.ts (owner: Dev A)
 // The A-owned control-plane routes (PLAN 11.12). Scaffold: users/projects. Step 11:
 // audit reads. Step 12: patches CRUD, validate, submit, reviews. Step 13: the merge
-// gate and the conflict check. Previews (14) stay as 501 stubs in app.ts.
+// gate and the conflict check. Step 14: previews. No A-owned 501 stubs remain.
 import type { FastifyInstance } from 'fastify';
 import { AppError, USER_HEADER } from '@patchwork/shared';
 import type {
   AuditType,
   ConflictResolutionChoice,
   PatchStatus,
+  PreviewSpec,
   ServiceRegistry,
 } from '@patchwork/shared';
 import type { Db } from '../db/sqlite.js';
@@ -22,6 +23,7 @@ import {
   updatePatch,
 } from './patches.js';
 import { checkConflicts, mergePatch, type MergeEngine } from './merge.js';
+import { previewUrl, updatePreviewRow } from './previews.js';
 import { validatePatchBody } from './validate.js';
 
 const STATUSES: PatchStatus[] = [
@@ -35,9 +37,9 @@ const STATUSES: PatchStatus[] = [
 
 export function registerCoreRoutes(
   app: FastifyInstance,
-  opts: { registry: ServiceRegistry; db: Db; engine?: MergeEngine },
+  opts: { registry: ServiceRegistry; db: Db; engine?: MergeEngine; previewOrigin?: string },
 ): void {
-  const { registry, db, engine } = opts;
+  const { registry, db, engine, previewOrigin = 'http://localhost:4300' } = opts;
 
   // --- users & projects (real since scaffold) ---------------------------------
   app.get('/api/users', async () => {
@@ -158,6 +160,26 @@ export function registerCoreRoutes(
     const { candidateIds } = (req.body ?? {}) as { candidateIds?: string[] };
     const candidates = (candidateIds ?? []).map((cid) => getPatchOrThrow(db, cid));
     return checkConflicts(registry, pid, candidates, engine);
+  });
+
+  // --- previews (step 14) -----------------------------------------------------------
+  app.post('/api/projects/:pid/previews', async (req) => {
+    const { pid } = req.params as { pid: string };
+    const actor = requireUser(db, req.headers[USER_HEADER] as string | undefined);
+    const spec = (req.body ?? {}) as PreviewSpec;
+    const preview = registry.core.createPreview(pid, spec, actor.id);
+    const firstPath = registry.core.getProject(pid)?.paths[0] ?? '/';
+    return { preview, url: previewUrl(preview.id, firstPath, previewOrigin) };
+  });
+
+  app.put('/api/previews/:id', async (req) => {
+    const { id } = req.params as { id: string };
+    const actor = requireUser(db, req.headers[USER_HEADER] as string | undefined);
+    const existing = registry.core.getPreview(id);
+    if (!existing) throw new AppError('NOT_FOUND', `No preview ${id}`);
+    const preview = updatePreviewRow(db, registry, id, req.body as PreviewSpec, actor.id);
+    const firstPath = registry.core.getProject(existing.projectId)?.paths[0] ?? '/';
+    return { preview, url: previewUrl(preview.id, firstPath, previewOrigin) };
   });
 
   // --- audit (service landed in step 11) -------------------------------------------
