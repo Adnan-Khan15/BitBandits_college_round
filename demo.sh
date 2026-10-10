@@ -90,6 +90,17 @@ mkdir -p "$LOGS"
 rm -f "$LOGS/pids"
 trap 'echo; stop_all; exit 0' INT TERM
 
+# Ask PATCHWORK uses a local model when Ollama is running (http://localhost:11434); warm it up once.
+if curl -s -m 2 http://localhost:11434/api/tags >/dev/null 2>&1; then
+  export PW_ASSIST_PROVIDER="${PW_ASSIST_PROVIDER:-ollama}"
+  MODEL="${PW_ASSIST_MODEL:-qwen3:4b}"
+  say "Ollama is running: Ask PATCHWORK uses $MODEL (warming it up)"
+  curl -s -m 60 http://localhost:11434/api/chat \
+    -d "{\"model\":\"$MODEL\",\"stream\":false,\"think\":false,\"format\":\"json\",\"messages\":[{\"role\":\"user\",\"content\":\"Reply {}\"}]}" >/dev/null 2>&1 &
+else
+  say "Ollama is not running: Ask PATCHWORK is off (the manual fix flow still works)"
+fi
+
 start_bg target npm run target
 wait_for http://localhost:4200/ "ShopLite upstream" 20
 start_bg server npx tsx apps/server/src/main.ts  # already built above

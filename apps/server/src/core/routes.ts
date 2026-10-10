@@ -27,13 +27,15 @@ import type {
   Role,
   ServiceRegistry,
 } from '@patchwork/shared';
-import { analyzeConflicts } from '@patchwork/engine';
 import { documentFromHtml } from '@patchwork/engine/node';
 import type { Db } from '../db/sqlite.js';
 import { loadEnv, type Env } from '../env.js';
 import { newId, type CoreServiceExt } from './index.js';
 import { pickBody } from './repo.js';
 import { getActiveProjectId, setActiveProjectId } from '../active.js';
+import { askModel } from '../assist/ollama.js';
+import { buildCandidates, toPatchParts } from '../assist/draft.js';
+import { analyzeConflicts, captureFingerprint, resolveAnchor } from '@patchwork/engine';
 import { validatePatchBody } from './validate.js';
 
 const PATCH_STATUSES: PatchStatus[] = ['draft', 'in_review', 'changes_requested', 'approved', 'merged', 'rejected'];
@@ -398,6 +400,141 @@ export function registerCoreRoutes(
     const preview = core.getPreview((req.params as { id: string }).id);
     if (!preview) throw new AppError('NOT_FOUND', 'No such preview');
     return { preview, url: previewUrl(preview) };
+  });
+
+  // --- Ask PATCHWORK: a local model drafts a fix; people review and ship it ---------
+
+  const aiDescription = (model: string, instruction: string) => `Drafted by PATCHWORK AI (${model}, local) from: ${instruction}`;
+
+  app.post('/api/projects/:pid/assist/draft', async (req) => {
+    const { pid } = req.params as { pid: string };
+    const user = actor(req);
+    const project = requireProject(pid);
+    const body = (req.body ?? {}) as { path?: unknown; instruction?: unknown; pickedElementPath?: unknown };
+    const instruction = typeof body.instruction === 'string' ? body.instruction.trim() : '';
+    if (instruction.length < 3 || instruction.length > 300) {
+      throw new AppError('VALIDATION_FAILED', 'Describe the change in a sentence, e.g. “hide the expired sale banner”.');
+    }
+    const path = typeof body.path === 'string' && body.path.startsWith('/') && !body.path.startsWith('//') ? body.path : (project.paths[0] ?? '/');
+    const picked = typeof body.pickedElementPath === 'string' ? body.pickedElementPath : null;
+
+    // the page exactly as the site serves it now
+    const snapshot = await registry.snapshots.capture(pid, path);
+    const { document } = documentFromHtml(snapshot.html, `${project.upstreamOrigin}${path}`);
+    const { candidates, elements } = buildCandidates(document, picked);
+    if (candidates.length === 0) throw new AppError('VALIDATION_FAILED', `Nothing to work with on ${path}.`);
+
+    // One structured answer; if it is incomplete or fails validation, the model gets one retry with the
+    // exact problem. After that a person takes over - never a half-made patch.
+    const attempt = (d: Awaited<ReturnType<typeof askModel>>['draft']) => {
+      const el = elements[d.targetIndex];
+      if (!el) throw new AppError('VALIDATION_FAILED', "The model chose an element that isn't on the page. Fix it manually, or rephrase.");
+      const { ops, checks } = toPatchParts(d);
+      const text = (el.textContent ?? '').replace(/\s+/g, ' ').trim();
+      const patchBody = validBody({
+        urlPath: path,
+        anchors: { a1: captureFingerprint(el, { capturedFromHash: snapshot.domHash }) },
+        ops,
+        checks,
+        baseSnapshotId: snapshot.id,
+        baseValues: ops[0]?.kind === 'setText' ? { 0: text } : {},
+      });
+      return { el, ops, text, patchBody };
+    };
+    let answer = await askModel(env, instruction, candidates);
+    let built: ReturnType<typeof attempt>;
+    try {
+      built = attempt(answer.draft);
+    } catch (err) {
+      if (!(err instanceof AppError) || err.code !== 'VALIDATION_FAILED') throw err;
+      const first = answer.latencyMs;
+      answer = await askModel(env, instruction, candidates, { draft: answer.draft, failure: err.message });
+      answer = { ...answer, latencyMs: answer.latencyMs + first };
+      built = attempt(answer.draft);
+    }
+    const { draft, model, latencyMs } = answer;
+    const { el, ops, text, patchBody } = built;
+    const now = new Date().toISOString();
+    const title = (draft.summary || 'Fix drafted by PATCHWORK AI').replace(/\s+/g, ' ').trim().slice(0, 80);
+    const patch: Patch = {
+      ...patchBody,
+      id: newId('pat'),
+      projectId: pid,
+      title,
+      description: aiDescription(model, instruction),
+      authorId: user.id,
+      status: 'draft',
+      revision: 1,
+      mergedRevision: null,
+      createdAt: now,
+      updatedAt: now,
+    };
+    inTransaction(() => {
+      repo.insertPatch(patch);
+      repo.insertRevision(patch.id, 1, title, patchBody, user.id);
+    });
+    audit(patch, 'patch.created', user.id, {
+      revision: 1,
+      title,
+      urlPath: path,
+      ops: ops.length,
+      draftedBy: { provider: 'ollama', model, latencyMs, instruction },
+    });
+    const preview = core.createPreview(pid, { base: 'live', include: [patch.id], exclude: [], draft: null, resolverMode: 'smart' }, user.id);
+    return {
+      patch,
+      previewId: preview.id,
+      previewUrl: previewUrl(preview),
+      summary: title,
+      model,
+      latencyMs,
+      element: { tag: el.tagName.toLowerCase(), text: text.slice(0, 80) },
+    };
+  });
+
+  /** One revision after a failed browser test: the model sees its draft and what failed. */
+  app.post('/api/patches/:id/assist/revise', async (req) => {
+    const patch = requirePatch((req.params as { id: string }).id);
+    const user = actor(req);
+    if (patch.status !== 'draft') throw new AppError('INVALID_STATE', 'Only a draft fix can be revised by the AI.');
+    const body = (req.body ?? {}) as { instruction?: unknown; failure?: unknown };
+    const instruction = typeof body.instruction === 'string' ? body.instruction.trim() : '';
+    const failure = typeof body.failure === 'string' ? body.failure.slice(0, 500) : 'the browser test failed';
+    const project = requireProject(patch.projectId);
+    const snapshot = registry.snapshots.latest(patch.projectId, patch.urlPath) ?? (await registry.snapshots.capture(patch.projectId, patch.urlPath));
+    const { document } = documentFromHtml(snapshot.html, `${project.upstreamOrigin}${patch.urlPath}`);
+    const { candidates, elements } = buildCandidates(document, null);
+    const fp = patch.anchors.a1;
+    const before = fp ? resolveAnchor(document, 'a1', fp) : null;
+    const previousIndex = before?.elementPath ? elements.findIndex((e) => e === document.querySelector(before.elementPath!)) : -1;
+    const { draft, model, latencyMs } = await askModel(env, instruction || patch.title, candidates, {
+      draft: { targetIndex: previousIndex, ops: patch.ops, checks: patch.checks },
+      failure,
+    });
+    const el = elements[draft.targetIndex];
+    if (!el) throw new AppError('VALIDATION_FAILED', "The model chose an element that isn't on the page. Fix it manually.");
+    const { ops, checks } = toPatchParts(draft);
+    const text = (el.textContent ?? '').replace(/\s+/g, ' ').trim();
+    const patchBody = validBody({
+      urlPath: patch.urlPath,
+      anchors: { a1: captureFingerprint(el, { capturedFromHash: snapshot.domHash }) },
+      ops,
+      checks,
+      baseSnapshotId: snapshot.id,
+      baseValues: ops[0]?.kind === 'setText' ? { 0: text } : {},
+    });
+    const title = (draft.summary || patch.title).replace(/\s+/g, ' ').trim().slice(0, 80);
+    const next: Patch = { ...patch, ...patchBody, title, revision: patch.revision + 1, updatedAt: new Date().toISOString() };
+    inTransaction(() => {
+      repo.insertRevision(next.id, next.revision, title, patchBody, user.id);
+      repo.updatePatch(next);
+    });
+    audit(next, 'patch.updated', user.id, {
+      revision: next.revision,
+      previousStatus: patch.status,
+      draftedBy: { provider: 'ollama', model, latencyMs, revisedAfter: failure },
+    });
+    return { patch: next, summary: title, model, latencyMs, element: { tag: el.tagName.toLowerCase(), text: text.slice(0, 80) } };
   });
 
   // --- connected sites ------------------------------------------------------------
