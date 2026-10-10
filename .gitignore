@@ -39,3 +39,13 @@ Thumbs.db
 ehthumbs.db
 Desktop.ini
 .DS_Store
+
+# PATCHWORK scaffold (PLAN 13.3 step 7)
+data/
+test-results/
+playwright-report/
+packages/runtime/dist/
+apps/web/dist/
+
+#Misc
+PLAN.MD
