@@ -194,6 +194,19 @@ export function createReleaseService(
       return getDeployment(id);
     });
 
+  /** Why a health check failed, in words: "R3 failed its live health check: 2 of 4 checks passed." */
+  const healthReason = (releaseId: Id, run: VerificationRun): string => {
+    const r = get(releaseId);
+    const name = r ? `R${r.number}` : 'The release';
+    const ok = run.steps.filter((s) => s.ok).length;
+    const parts = [`${ok} of ${run.steps.length} checks passed`];
+    const skipped = run.patchApplication.filter((p) => !p.applied && p.reason !== 'path_mismatch').length;
+    if (skipped > 0) parts.push(`${skipped} fix(es) could not be applied`);
+    if (run.newConsoleErrors.length > 0) parts.push(`${run.newConsoleErrors.length} new page error(s)`);
+    if (run.status === 'error') return `${name} could not be checked: ${run.summary}`;
+    return `${name} failed its live health check: ${parts.join(', ')}.`;
+  };
+
   const endDeployment = (id: Id, status: Deployment['status'], healthRunId: Id | null): void => {
     db.prepare('UPDATE deployments SET status = ?, ended_at = ?, health_run_id = COALESCE(?, health_run_id) WHERE id = ?').run(
       status,
@@ -238,7 +251,7 @@ export function createReleaseService(
         deployment.previousReleaseId,
         'auto_rollback',
         'system',
-        `Health check failed for ${deployment.releaseId}: ${run.summary}`,
+        healthReason(deployment.releaseId, run),
         'rolled_back',
       );
       registry.audit.append({

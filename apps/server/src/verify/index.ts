@@ -22,6 +22,7 @@ import type {
   Id,
   Preview,
   PreviewSpec,
+  Rect,
   RuntimePatchStatus,
   ServiceRegistry,
   StepResult,
@@ -113,14 +114,15 @@ async function pixelDiff(
   browser: Browser,
   a: Buffer,
   b: Buffer,
-): Promise<{ diffPixels: number; totalPixels: number; png: Buffer; heightsDiffer: boolean }> {
+  mask: Rect[],
+): Promise<{ diffPixels: number; totalPixels: number; outsideDiff: number; outsideTotal: number; png: Buffer; heightsDiffer: boolean }> {
   const context = await browser.newContext();
   try {
     const page = await context.newPage();
     // tsx/esbuild (keepNames) wraps named inner functions in __name(); give the page a no-op one.
     await page.evaluate('globalThis.__name = (fn) => fn');
     const out = await page.evaluate(
-      async ({ a64, b64, threshold }) => {
+      async ({ a64, b64, threshold, rects }) => {
         const load = (src: string) =>
           new Promise<HTMLImageElement>((ok, fail) => {
             const img = new Image();
@@ -149,6 +151,17 @@ async function pixelDiff(
         const ctx = canvas.getContext('2d')!;
         const outData = ctx.createImageData(w, h);
         const maxDelta = 35215 * threshold * threshold;
+        // mask = the patched elements (+8 px): change there is the fix itself, not a side effect
+        const inMask = new Uint8Array(w * h);
+        for (const r of rects) {
+          const x0 = Math.max(0, Math.floor(r.x - 8));
+          const y0 = Math.max(0, Math.floor(r.y - 8));
+          const x1 = Math.min(w, Math.ceil(r.x + r.width + 8));
+          const y1 = Math.min(h, Math.ceil(r.y + r.height + 8));
+          for (let yy = y0; yy < y1; yy++) inMask.fill(1, yy * w + x0, yy * w + x1);
+        }
+        let outsideDiff = 0;
+        let outsideTotal = 0;
         const y = (r: number, g: number, bl: number) => r * 0.29889531 + g * 0.58662247 + bl * 0.11448223;
         const i_ = (r: number, g: number, bl: number) => r * 0.59597799 - g * 0.2741761 - bl * 0.32180189;
         const q = (r: number, g: number, bl: number) => r * 0.21147017 - g * 0.52261711 + bl * 0.31114694;
@@ -160,20 +173,40 @@ async function pixelDiff(
           const di = i_(r1, g1, b1) - i_(r2, g2, b2);
           const dq = q(r1, g1, b1) - q(r2, g2, b2);
           const delta = 0.5053 * dy * dy + 0.299 * di * di + 0.1957 * dq * dq;
+          const masked = inMask[k / 4] === 1;
+          if (!masked) outsideTotal++;
           if (delta > maxDelta) {
             diff++;
-            outData.data.set([255, 0, 0, 255], k);
+            if (masked) outData.data.set([91, 52, 224, 255], k); // the fix itself: patch violet
+            else {
+              outsideDiff++;
+              outData.data.set([220, 38, 38, 255], k); // a side effect: solid red
+            }
           } else {
-            const gray = 255 - 0.1 * (255 - y(r1, g1, b1)); // faded baseline, like pixelmatch alpha 0.1
+            const gray = 255 - 0.3 * (255 - y(r2, g2, b2)); // the page, dimmed to 30%
             outData.data.set([gray, gray, gray, 255], k);
           }
         }
         ctx.putImageData(outData, 0, 0);
-        return { diff, total: w * h, png: canvas.toDataURL('image/png').split(',')[1]!, differ: ia.height !== ib.height };
+        return {
+          diff,
+          total: w * h,
+          outsideDiff,
+          outsideTotal,
+          png: canvas.toDataURL('image/png').split(',')[1]!,
+          differ: ia.height !== ib.height,
+        };
       },
-      { a64: a.toString('base64'), b64: b.toString('base64'), threshold: PIXEL_THRESHOLD },
+      { a64: a.toString('base64'), b64: b.toString('base64'), threshold: PIXEL_THRESHOLD, rects: mask },
     );
-    return { diffPixels: out.diff, totalPixels: out.total, png: Buffer.from(out.png, 'base64'), heightsDiffer: out.differ };
+    return {
+      diffPixels: out.diff,
+      totalPixels: out.total,
+      outsideDiff: out.outsideDiff,
+      outsideTotal: out.outsideTotal,
+      png: Buffer.from(out.png, 'base64'),
+      heightsDiffer: out.differ,
+    };
   } finally {
     await context.close();
   }
@@ -397,7 +430,9 @@ export function createVerifyService(db: Db, registry: ServiceRegistry, env: Env 
         }
         const base = await visit(baseline.context, baselinePreview, baselineOrigin, path, baselinePreview !== null);
         if (subject.kind === 'live') continue; // live: console comparison only, no visual
-        const diff = await pixelDiff(b, base.png, cand.png);
+        const ownHere = new Set(patches.filter((p) => pathMatches(p.urlPath, path)).map((p) => p.patchId));
+        const mask = cand.statuses.filter((s) => s.applied && ownHere.has(s.patchId)).flatMap((s) => s.affectedRects);
+        const diff = await pixelDiff(b, base.png, cand.png, mask);
         const slug = slugOf(path);
         visual.push({
           path,
@@ -406,9 +441,10 @@ export function createVerifyService(db: Db, registry: ServiceRegistry, env: Env 
           diff: await artifact(`${run.id}-${slug}-diff.png`, diff.png),
           diffPixels: diff.diffPixels,
           totalPixels: diff.totalPixels,
-          outsideMaskRatio: diff.totalPixels > 0 ? diff.diffPixels / diff.totalPixels : 0, // whole page, no mask (solo cut)
+          outsideMaskRatio: diff.outsideTotal > 0 ? diff.outsideDiff / diff.outsideTotal : 0,
           layoutChanging: layoutChanging || diff.heightsDiffer,
-          outcome: diff.diffPixels > 0 ? 'warn' : 'pass',
+          // a visual difference never blocks on its own: checks and console errors decide pass/fail
+          outcome: diff.outsideDiff / Math.max(1, diff.outsideTotal) > 0.005 || layoutChanging || diff.heightsDiffer ? 'warn' : 'pass',
         });
       }
 
