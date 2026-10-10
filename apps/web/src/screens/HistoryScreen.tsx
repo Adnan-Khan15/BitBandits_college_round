@@ -173,16 +173,23 @@ export function HistoryScreen() {
         <ol className={styles.timeline}>
           {shown.map((e) => {
             const group = groupOf(e.type);
+            const d = e.data as Record<string, unknown>;
+            // failures never wear a success icon: status is icon + word, never colour alone
+            const bad =
+              e.type === 'deployment.failed' ||
+              e.type === 'release.auto_rolled_back' ||
+              e.type === 'conflict.detected' ||
+              (e.type === 'verification.finished' && d.status !== 'passed');
             const actor = nameOf(users, e.actorId);
             return (
-              <li key={e.id} className={`${styles.event} ${styles[group] ?? ''}`}>
+              <li key={e.id} className={`${styles.event} ${bad ? styles.bad : (styles[group] ?? '')}`}>
                 <span className={styles.avatar} aria-hidden="true">
                   {e.actorId === 'system' ? '⚙' : actor.slice(0, 1)}
                 </span>
                 <div className={styles.body}>
                   <p className={styles.sentence}>
                     <span className={styles.icon} aria-hidden="true">
-                      {ICON[group] ?? '·'}
+                      {bad ? '✕' : (ICON[group] ?? '•')}
                     </span>{' '}
                     {sentence(e)}
                   </p>

@@ -11,6 +11,7 @@ import { highlightMessage, pickStartMessage, pickStopMessage, useRuntimeBridge }
 import { ErrorNotice } from '../components/Notice.js';
 import { Chip, PatchStatusChip } from '../components/StatusChip.js';
 import { useCurrentUserId } from '../user.js';
+import { useRoute } from '../router.js';
 import { nameOf, useTeam } from '../team.js';
 import {
   ATTR_CHOICES,
@@ -41,6 +42,9 @@ const cap = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
 export function StudioScreen() {
   const team = useTeam();
   const userId = useCurrentUserId();
+  const segments = useRoute();
+  // #/studio/fix/<id>: show one fix from Review on top of the live site
+  const viewFixId = segments[1] === 'fix' ? (segments[2] ?? null) : null;
 
   /* --- the site: project, live release, my fixes (polled every 2 s) ------------------- */
   const { data: site } = usePoll<SiteState>(async () => {
@@ -119,6 +123,7 @@ export function StudioScreen() {
   /* --- preview: one preview per Studio session; the draft rides on it ---------------------- */
   const [preview, setPreview] = useState<{ id: string } | null>(null);
   const spec: PreviewSpec | null = useMemo(() => {
+    if (viewFixId && !picked) return { base: 'live', include: [viewFixId], exclude: [], draft: null, resolverMode: 'smart' };
     if (sentPatch) return { base: 'live', include: [sentPatch.id], exclude: [], draft: null, resolverMode: 'smart' };
     const anchors: Record<string, Picked['fingerprint']> = {};
     if (picked) anchors.a1 = picked.fingerprint;
@@ -137,7 +142,7 @@ export function StudioScreen() {
         : null;
     return { base: 'live', include: [], exclude: [], draft, resolverMode: 'smart' };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [JSON.stringify([picked?.fingerprint, form, effectiveTitle, removedChecks, sentPatch?.id, sentPatch?.revision])]);
+  }, [JSON.stringify([picked?.fingerprint, form, effectiveTitle, removedChecks, sentPatch?.id, sentPatch?.revision, viewFixId])]);
 
   const specJson = JSON.stringify(spec);
   const lastSpec = useRef<string>('');
@@ -161,6 +166,12 @@ export function StudioScreen() {
     }, 350);
     return () => window.clearTimeout(handle);
   }, [project, preview, spec, specJson]);
+
+  // opening a fix from Review jumps to the page it changes
+  const fixPath = viewFixId ? (site?.patches ?? []).find((p) => p.id === viewFixId)?.urlPath ?? null : null;
+  useEffect(() => {
+    if (fixPath && !fixPath.endsWith('/*')) setPath(fixPath);
+  }, [fixPath]);
 
   const previewSrc = preview
     ? `${PREVIEW_ORIGIN}/__patchwork/preview/${preview.id}?path=${encodeURIComponent(path)}&editor=1&k=${previewKey}`
@@ -292,8 +303,11 @@ export function StudioScreen() {
     );
   };
 
+  const viewedFix = viewFixId ? (site?.patches ?? []).find((p) => p.id === viewFixId) ?? null : null;
   const caption: Record<Tab, string> = {
-    preview: picked ? 'Your fix, not shipped yet. Only you see this.' : 'The live site plus your unshipped fix. Only you see this.',
+    preview: viewedFix && !picked
+      ? `The live site plus “${viewedFix.title}”, the fix under review. Customers don't see it yet.`
+      : picked ? 'Your fix, not shipped yet. Only you see this.' : 'The live site plus your unshipped fix. Only you see this.',
     live: `What customers see right now: ${liveRelease ? `release R${liveRelease.number}` : 'no release yet, the original site'}.`,
     original: "ShopLite's own server. Its code is never changed.",
   };

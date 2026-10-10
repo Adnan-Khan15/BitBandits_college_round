@@ -131,3 +131,11 @@
   background: var(--surface-sunk);
   font-size: var(--fs-xs);
 }
+
+.bad .icon {
+  color: var(--broken);
+}
+
+.bad .sentence {
+  color: var(--broken);
+}

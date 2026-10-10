@@ -21,6 +21,7 @@ interface ReviewData {
 }
 
 const cap = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
+const pageName = (path: string): string => (path === '/' ? 'the home page' : `the ${path} page`);
 
 /** "Adnan's “Fix price typo” also changes the text of “₹12,99”: theirs ₹1,299, this fix ₹1,199." */
 function conflictSentence(c: Conflict, all: Patch[], users: User[], candidate: Patch): string {
@@ -137,7 +138,7 @@ export function ReviewScreen() {
                   <span className={styles.listMeta}>
                     <PatchStatusChip status={p.status} />
                     <span>
-                      {nameOf(users, p.authorId)}, {p.urlPath}, {formatWhen(p.updatedAt)}
+                      {nameOf(users, p.authorId)}, {pageName(p.urlPath)}, {formatWhen(p.updatedAt)}
                     </span>
                   </span>
                 </button>
@@ -152,8 +153,15 @@ export function ReviewScreen() {
                 <PatchStatusChip status={selected.status} />
               </div>
               <div className={styles.meta}>
-                By {nameOf(users, selected.authorId)} on the {selected.urlPath} page, {formatWhen(selected.updatedAt)}
+                By {nameOf(users, selected.authorId)} on {pageName(selected.urlPath)}, {formatWhen(selected.updatedAt)}
               </div>
+              {selected.mergedRevision !== null && selected.revision > selected.mergedRevision ? (
+                <Notice title="An update to a live fix">
+                  Version {selected.mergedRevision} is live. This is version {selected.revision}
+                  {selected.revision === selected.mergedRevision + 1 ? '' : ' or later'}, for example re-anchored by Drift
+                  Sentinel after the shop changed its page.
+                </Notice>
+              ) : null}
               {selected.description ? <p className="prose">{selected.description}</p> : null}
 
               <h3 className={styles.subhead}>What it changes</h3>
@@ -175,6 +183,9 @@ export function ReviewScreen() {
               )}
 
               <div className={styles.actions}>
+                <a className="btn" href={`#/studio/fix/${selected.id}`}>
+                  Preview this fix
+                </a>
                 <button
                   className="btn"
                   type="button"
