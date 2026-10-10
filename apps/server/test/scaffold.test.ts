@@ -4,7 +4,7 @@ import { migrate } from '../src/db/migrate.js';
 import { openDb, type Db } from '../src/db/sqlite.js';
 import { loadEnv, parseDotEnv } from '../src/env.js';
 import { SEED_PROJECT, SEED_USERS } from '../src/db/seed-data.js';
-import { buildControlApp } from '../src/app.js';
+import { buildControlApp, STUB_ROUTES } from '../src/app.js';
 import { buildRegistry } from '../src/registry.js';
 
 const db: Db = openDb(':memory:');
@@ -55,13 +55,58 @@ describe('scaffold', () => {
     await app.close();
   });
 
-  it('answers stub routes with 501 NOT_IMPLEMENTED in the ApiError shape', async () => {
+  it('answers A-owned stub routes with 501 NOT_IMPLEMENTED in the ApiError shape', async () => {
     const app = buildControlApp({ registry: buildRegistry(db), db });
-    const res = await app.inject({ method: 'GET', url: '/api/bench' });
+    const res = await app.inject({ method: 'POST', url: `/api/projects/${SEED_PROJECT.id}/patches` });
     expect(res.statusCode).toBe(501);
     const body = res.json() as { error: { code: string; requestId: string } };
     expect(body.error.code).toBe('NOT_IMPLEMENTED');
     expect(typeof body.error.requestId).toBe('string');
+    await app.close();
+  });
+
+  it('answers unknown routes with 404 in the ApiError shape (B's and C's routes are theirs to register)', async () => {
+    const app = buildControlApp({ registry: buildRegistry(db), db });
+    const res = await app.inject({ method: 'GET', url: '/api/no-such-route' });
+    expect(res.statusCode).toBe(404);
+    const body = res.json() as { error: { code: string } };
+    expect(body.error.code).toBe('NOT_FOUND');
+    await app.close();
+  });
+
+  // Regression: duplicate-route boot failure (FST_ERR_DUPLICATED_ROUTES) seen by Dev C.
+  // Dev A must not pre-register routes that Dev B or Dev C own - each owner's
+  // register* function is the sole registrant of its own routes (PLAN 11.12, 11.17).
+  it('pre-registers no route owned by Dev B or Dev C', async () => {
+    const bcOwned: Array<{ method: string; url: string }> = [
+      { method: 'POST', url: '/api/projects/:pid/snapshots' },
+      { method: 'GET', url: '/api/projects/:pid/releases' },
+      { method: 'POST', url: '/api/projects/:pid/releases' },
+      { method: 'POST', url: '/api/releases/:id/verify' },
+      { method: 'POST', url: '/api/releases/:id/deploy' },
+      { method: 'POST', url: '/api/projects/:pid/rollback' },
+      { method: 'GET', url: '/api/projects/:pid/deployments' },
+      { method: 'POST', url: '/api/projects/:pid/verifications' },
+      { method: 'GET', url: '/api/verifications/:id' },
+      { method: 'GET', url: '/api/artifacts/:file' },
+      { method: 'POST', url: '/api/projects/:pid/drift/check' },
+      { method: 'GET', url: '/api/projects/:pid/drift' },
+      { method: 'POST', url: '/api/drift/:id/quarantine' },
+      { method: 'GET', url: '/api/bench' },
+    ];
+    const overlaps = STUB_ROUTES.filter((stub) =>
+      bcOwned.some((owned) => owned.url === stub.url && owned.method === stub.method),
+    );
+    expect(overlaps).toEqual([]);
+  });
+
+  it('boots when an owner re-registers its real routes (no duplicate-route error)', async () => {
+    // Simulates Dev C landing releases/snapshots/verify routes on the same app.
+    const registry = buildRegistry(db);
+    const app = buildControlApp({ registry, db });
+    app.get('/api/projects/:pid/releases', async () => ({ items: [] }));
+    app.post('/api/projects/:pid/snapshots', async () => ({ id: 'snp_1' }));
+    await expect(app.ready()).resolves.toBeUndefined();
     await app.close();
   });
 });
