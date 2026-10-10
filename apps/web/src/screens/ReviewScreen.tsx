@@ -63,7 +63,7 @@ export function ReviewScreen() {
 
   if (loading && !data) return <p className={styles.small}>Loading the review inbox…</p>;
   if (loadError) return <ErrorNotice error={loadError} />;
-  if (!data?.projectId) return <EmptyState>No project yet. Run <code>./demo.sh</code> to seed ShopLite.</EmptyState>;
+  if (!data?.projectId) return <EmptyState>No project yet. Run <code>patchwork</code> to start and seed ShopLite.</EmptyState>;
 
   const { waiting, all, users, projectId } = data;
   const selected = waiting.find((p) => p.id === selectedId) ?? waiting[0] ?? null;

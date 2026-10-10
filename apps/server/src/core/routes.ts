@@ -612,7 +612,7 @@ export function registerCoreRoutes(
   app.get('/api/active-project', async () => {
     const id = getActiveProjectId();
     const project = core.getProject(id);
-    if (!project) throw new AppError('NOT_FOUND', `The active site ${id} does not exist. Run ./demo.sh to seed it.`);
+    if (!project) throw new AppError('NOT_FOUND', `The active site ${id} does not exist. Run patchwork to start and seed it.`);
     return project;
   });
 

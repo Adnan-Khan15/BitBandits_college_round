@@ -107,7 +107,7 @@ export function DriftScreen() {
 
   if (loading && !data) return <p className={styles.small}>Loading Drift Sentinel…</p>;
   if (loadError) return <ErrorNotice error={loadError} />;
-  if (!data?.project) return <EmptyState>No project yet. Run <code>./demo.sh</code> to seed ShopLite.</EmptyState>;
+  if (!data?.project) return <EmptyState>No project yet. Run <code>patchwork</code> to start and seed ShopLite.</EmptyState>;
 
   const { project, reports, explain, releases, users, bench, version } = data;
   // the v1/v2 redesign switch belongs to the ShopLite demo server; other sites are checked as they are

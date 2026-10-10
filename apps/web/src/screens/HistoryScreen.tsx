@@ -59,7 +59,7 @@ export function HistoryScreen() {
 
   if (loading && !data) return <p className={styles.small}>Loading history…</p>;
   if (error) return <ErrorNotice error={error} />;
-  if (!data) return <EmptyState>No project yet. Run <code>./demo.sh</code> to seed ShopLite.</EmptyState>;
+  if (!data) return <EmptyState>No project yet. Run <code>patchwork</code> to start and seed ShopLite.</EmptyState>;
 
   const { events, chain, patches, releases, users } = data;
   const title = (id: string) => `“${patches.find((p) => p.id === id)?.title ?? 'a fix'}”`;

@@ -71,12 +71,14 @@ Open `http://localhost:4000`, pick a user (identity is a picker, not auth), and:
 
 ## Run the demo
 
-One command does everything below (fresh data, build, all services, demo seed) and opens the UI:
+One command does everything below (Ollama for Ask PATCHWORK, fresh data, build, all services, demo
+seed) and opens the UI:
 
 ```bash
-./demo.sh            # start; Ctrl+C stops everything
-./demo.sh --keep     # start again without resetting the data
-./demo.sh stop       # stop everything from another terminal
+./patchwork install  # once: puts the `patchwork` command on your PATH
+patchwork            # start; Ctrl+C stops everything, Ollama included
+patchwork --keep     # start again without resetting the data
+patchwork stop       # stop everything, Ollama included, from any terminal
 ```
 
 Logs go to `data/logs/`. The same steps by hand:

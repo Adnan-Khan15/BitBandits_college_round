@@ -55,7 +55,7 @@ export function ShipScreen() {
 
   if (loading && !data) return <p className={styles.small}>Loading releases…</p>;
   if (loadError) return <ErrorNotice error={loadError} />;
-  if (!data?.project) return <EmptyState>No project yet. Run <code>./demo.sh</code> to seed ShopLite.</EmptyState>;
+  if (!data?.project) return <EmptyState>No project yet. Run <code>patchwork</code> to start and seed ShopLite.</EmptyState>;
 
   const { project, releases, deployments, patches, users } = data;
   const rm = personFor(users, 'release_manager');
