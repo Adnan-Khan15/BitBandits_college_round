@@ -13,6 +13,7 @@ import { openDb, type Db } from './db/sqlite.js';
 import { migrate } from './db/migrate.js';
 import { loadEnvFromDisk } from './env.js';
 import { buildRegistry } from './registry.js';
+import { installApiErrorHandling } from './core/http.js';
 import { registerGatewayRoutes } from './gateway/index.js';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
@@ -39,11 +40,13 @@ async function main(): Promise<void> {
 
   // Live gateway (:4100) - only the active release, never reads the preview cookie.
   const live = Fastify({ logger: true });
+  installApiErrorHandling(live);
   registerGatewayRoutes(live, registry, 'live');
   await live.listen({ port: env.PW_LIVE_PORT, host: '127.0.0.1' });
 
   // Preview gateway (:4300) - cookie-scoped preview, never falls back to live.
   const preview = Fastify({ logger: true });
+  installApiErrorHandling(preview);
   registerGatewayRoutes(preview, registry, 'preview');
   await preview.listen({ port: env.PW_PREVIEW_PORT, host: '127.0.0.1' });
 
