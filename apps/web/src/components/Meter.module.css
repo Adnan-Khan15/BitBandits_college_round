@@ -1,0 +1,50 @@
+.meter {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 11rem;
+}
+
+.track {
+  position: relative;
+  flex: 1;
+  height: 6px;
+  background: var(--surface-sunk);
+  border-radius: 1px;
+  overflow: hidden;
+}
+
+.fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: var(--blueprint);
+}
+
+/* the runner-up's score: the margin between best and second best */
+.runnerUp {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--ink);
+  opacity: 0.55;
+}
+
+.threshold {
+  position: absolute;
+  top: -1px;
+  bottom: -1px;
+  width: 1px;
+  background: var(--ink-3);
+}
+
+.thresholdExact {
+  background: var(--ink);
+}
+
+.value {
+  font-size: var(--fs-xs);
+  color: var(--ink-2);
+  min-width: 2.2rem;
+  text-align: right;
+}
