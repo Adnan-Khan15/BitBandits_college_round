@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>ShopLite — Home</title>
+<style>
+body{font-family:system-ui,sans-serif;margin:0;background:#f6f7f9;color:#1a1a1a}
+.topbar{background:#fff;border-bottom:1px solid #e3e6ea}
+.main-nav{max-width:960px;margin:0 auto;padding:12px 24px;display:flex;gap:16px;align-items:center}
+.nav-link{color:#2f6f4f;text-decoration:none;font-size:14px}
+.dropdown{position:relative;display:inline-block}
+.dropdown-toggle{border:1px solid #ccd2d9;border-radius:6px;background:#fff;padding:8px 12px;font-size:14px;cursor:pointer}
+.dropdown-menu{display:none;position:absolute;top:100%;left:0;margin:4px 0 0;padding:8px 0;list-style:none;background:#fff;border:1px solid #e3e6ea;border-radius:6px;min-width:140px}
+.dropdown:hover .dropdown-menu{display:block}
+.dropdown-menu li{padding:4px 12px}
+.page{max-width:960px;margin:0 auto;padding:24px;font-size:14px}
+</style>
+</head>
+<body>
+<header class="topbar">
+<nav class="main-nav">
+<a class="nav-link" href="/">Home</a>
+<a class="nav-link" href="/cart">Cart</a>
+<div class="dropdown">
+<button class="dropdown-toggle" type="button">Account</button>
+<ul class="dropdown-menu">
+<li><a class="nav-link nav-link--account" href="/account">My orders</a></li>
+</ul>
+</div>
+</nav>
+</header>
+<main class="page">
+<h1>Deals of the week</h1>
+<p>Up to 40% off on accessories.</p>
+</main>
+</body>
+</html>

@@ -1,0 +1,7 @@
+{
+  "id": "dev-wrapped-02",
+  "category": "wrapped",
+  "targetBefore": ".coupon-apply",
+  "expectedAfter": ".coupon-apply",
+  "notes": "Apply-coupon button wrapped in a new div.promo-field that also introduces a label sibling. Expected: relocated; neighbourText and ancestors change, button itself is identical."
+}

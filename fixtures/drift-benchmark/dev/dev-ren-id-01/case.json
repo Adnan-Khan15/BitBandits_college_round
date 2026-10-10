@@ -1,0 +1,7 @@
+{
+  "id": "dev-ren-id-01",
+  "category": "renamed",
+  "targetBefore": "#checkout-btn",
+  "expectedAfter": "#cta-checkout",
+  "notes": "Only the id attribute is renamed; tag, classes, text and position are unchanged. Expected: relocated, matched on text, classes and neighbour text despite the id change."
+}

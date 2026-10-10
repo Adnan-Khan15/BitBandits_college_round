@@ -1,0 +1,7 @@
+{
+  "id": "dev-text-02",
+  "category": "text",
+  "targetBefore": "#details-link",
+  "expectedAfter": "#details-link",
+  "notes": "Small wording change on the target link (View details -> See product details); a different link with partially overlapping text exists as a natural distractor. Expected: exact."
+}

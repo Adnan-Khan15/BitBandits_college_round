@@ -1,0 +1,7 @@
+{
+  "id": "dev-text-01",
+  "category": "text",
+  "targetBefore": "#checkout-btn",
+  "expectedAfter": "#checkout-btn",
+  "notes": "Only the visible text changes (Proceed checkout -> Continue to checkout); id, classes and position identical. Expected: exact, matched on id/classes with high text similarity."
+}
