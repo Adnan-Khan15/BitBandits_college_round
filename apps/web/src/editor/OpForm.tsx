@@ -1,6 +1,6 @@
 import type { AttributeName, StyleProperty } from '@patchwork/shared';
 import { ATTRIBUTE_ALLOWLIST, STYLE_ALLOWLIST } from '@patchwork/shared';
-import type { ActionDraft, OpDraft } from './opForm.js';
+import type { ActionDraft, OpDraft } from './opFormModel.js';
 import styles from './OpForm.module.css';
 
 type Current = { text: string; attrs: Record<string, string>; styles: Record<string, string> };

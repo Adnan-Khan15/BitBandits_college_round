@@ -21,7 +21,7 @@ import { ErrorNotice, Notice } from '../components/Notice.js';
 import { PatchStatusChip } from '../components/StatusChip.js';
 import { ChecksBuilder } from './ChecksBuilder.js';
 import { OpForm } from './OpForm.js';
-import { OP_KINDS, type OpDraft, type OpKind, describeOp, emptyOpDraft, opDraftToOp } from './opForm.js';
+import { OP_KINDS, type OpDraft, type OpKind, describeOp, emptyOpDraft, opDraftToOp } from './opFormModel.js';
 import styles from './EditorScreen.module.css';
 
 interface EditorDraft {

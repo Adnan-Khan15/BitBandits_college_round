@@ -321,7 +321,7 @@ describe('drift.bench', () => {
     expect(env.service.bench()).toEqual(rows);
 
     writeFileSync(env.benchFile, '{not json', 'utf8');
-    expect(() => env.service.bench()).toThrow(/unreadable/);
+    expect(() => env!.service.bench()).toThrow(/unreadable/);
   });
 });
 
