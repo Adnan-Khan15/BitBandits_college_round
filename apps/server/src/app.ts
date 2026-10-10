@@ -9,6 +9,7 @@ import { ZodError } from 'zod';
 import { AppError, isAppError, USER_HEADER } from '@patchwork/shared';
 import type { ServiceRegistry } from '@patchwork/shared';
 import type { Db } from './db/sqlite.js';
+import type { Env } from './env.js';
 import { registerSnapshotRoutes } from './snapshots/index.js';
 import { registerVerifyRoutes } from './verify/index.js';
 import { registerReleaseRoutes } from './releases/index.js';
@@ -18,31 +19,15 @@ import { registerCoreRoutes } from './core/routes.js';
 export interface AppOptions {
   registry: ServiceRegistry;
   db: Db;
+  env?: Env;
   logger?: boolean;
 }
 
-/** Every A-owned control route that is still a stub until Phase 2 (steps 10-15).
- *
- * Ownership rule (fixes the duplicate-route boot failure on integration): Dev A
- * registers ONLY A-owned routes here. Dev B and Dev C register their own routes -
- * including their own 501 stubs if they want them - inside their own register*
- * functions (drift/index.ts, snapshots/, verify/, releases/, gateway/). If Dev A
- * pre-registers another dev's routes here, Fastify throws FST_ERR_DUPLICATED_ROUTES
- * at boot the moment the owner lands the real route. Unregistered routes answer with
- * the 404 ApiError response from setNotFoundHandler below. */
-export const STUB_ROUTES: Array<Pick<RouteOptions, 'method' | 'url'> & { phase: string }> = [
-  { method: 'GET', url: '/api/projects/:pid/patches', phase: 'Phase 2 step 12' },
-  { method: 'POST', url: '/api/projects/:pid/patches', phase: 'Phase 2 step 12' },
-  { method: 'GET', url: '/api/patches/:id', phase: 'Phase 2 step 12' },
-  { method: 'PUT', url: '/api/patches/:id', phase: 'Phase 2 step 12' },
-  { method: 'POST', url: '/api/patches/:id/validate', phase: 'Phase 2 step 10' },
-  { method: 'POST', url: '/api/patches/:id/submit', phase: 'Phase 2 step 12' },
-  { method: 'POST', url: '/api/patches/:id/reviews', phase: 'Phase 2 step 12' },
-  { method: 'POST', url: '/api/patches/:id/merge', phase: 'Phase 2 step 13' },
-  { method: 'POST', url: '/api/projects/:pid/conflicts', phase: 'Phase 2 step 13' },
-  { method: 'POST', url: '/api/projects/:pid/previews', phase: 'Phase 2 step 14' },
-  { method: 'PUT', url: '/api/previews/:id', phase: 'Phase 2 step 14' },
-];
+/** A-owned control routes that are still stubs (answer 501). Solo Phase 2 replaced them all with
+ * core/routes.ts; the export stays so the scaffold regression test can assert no B/C overlap.
+ * Ownership rule: Dev A registers ONLY A-owned routes here; Dev B and Dev C register theirs in
+ * their own register* functions, otherwise Fastify throws FST_ERR_DUPLICATED_ROUTES at boot. */
+export const STUB_ROUTES: Array<Pick<RouteOptions, 'method' | 'url'> & { phase: string }> = [];
 
 export function buildControlApp(opts: AppOptions): FastifyInstance {
   const { registry, db } = opts;
@@ -160,12 +145,12 @@ export function buildControlApp(opts: AppOptions): FastifyInstance {
   }
 
   // --- A-owned real routes (core/routes.ts) ---------------------------------
-  registerCoreRoutes(app, registry);
+  registerCoreRoutes(app, registry, db, opts.env);
 
   // --- B's and C's route plugins --------------------------------------------
   registerSnapshotRoutes(app, registry);
   registerVerifyRoutes(app, registry);
-  registerReleaseRoutes(app, registry);
+  registerReleaseRoutes(app, registry, db);
   registerDriftRoutes(app, registry);
 
   return app;

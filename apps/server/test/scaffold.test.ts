@@ -55,12 +55,12 @@ describe('scaffold', () => {
     await app.close();
   });
 
-  it('answers A-owned stub routes with 501 NOT_IMPLEMENTED in the ApiError shape', async () => {
+  it('answers A-owned routes in the ApiError shape (no acting user -> 403)', async () => {
     const app = buildControlApp({ registry: buildRegistry(db), db });
     const res = await app.inject({ method: 'POST', url: `/api/projects/${SEED_PROJECT.id}/patches` });
-    expect(res.statusCode).toBe(501);
+    expect(res.statusCode).toBe(403);
     const body = res.json() as { error: { code: string; requestId: string } };
-    expect(body.error.code).toBe('NOT_IMPLEMENTED');
+    expect(body.error.code).toBe('FORBIDDEN');
     expect(typeof body.error.requestId).toBe('string');
     await app.close();
   });
@@ -100,12 +100,10 @@ describe('scaffold', () => {
     expect(overlaps).toEqual([]);
   });
 
-  it('boots when an owner re-registers its real routes (no duplicate-route error)', async () => {
-    // Simulates Dev C landing releases/snapshots/verify routes on the same app.
+  it('boots with every owner registering its real routes (no duplicate-route error)', async () => {
+    // Dev C's releases/snapshots routes are real now; they must not collide with A's routes.
     const registry = buildRegistry(db);
     const app = buildControlApp({ registry, db });
-    app.get('/api/projects/:pid/releases', async () => ({ items: [] }));
-    app.post('/api/projects/:pid/snapshots', async () => ({ id: 'snp_1' }));
     await app.ready(); // must not throw FST_ERR_DUPLICATED_ROUTES
     const res = await app.inject({ method: 'GET', url: '/api/no-such-route' });
     expect(res.statusCode).toBe(404);

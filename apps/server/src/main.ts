@@ -26,7 +26,7 @@ async function main(): Promise<void> {
   const registry = buildRegistry(db, env);
 
   // Control plane (:4000)
-  const control = buildControlApp({ registry, db, logger: true });
+  const control = buildControlApp({ registry, db, env, logger: true });
   await control.listen({ port: env.PW_CONTROL_PORT, host: '127.0.0.1' });
 
   // Serve the built web app in start mode (PLAN section 17: npm run build && npm start).
