@@ -4,6 +4,7 @@
 export const STYLE_ALLOWLIST = [
   'color',
   'background-color',
+  'background-image',
   'font-size',
   'font-weight',
   'font-style',
@@ -117,6 +118,8 @@ export const LIMITS = {
   ancestorsMax: 5,
   candidatesCap: 5_000,
 } as const;
+
+export const URL_ALLOWED_PROTOCOLS = ['http:', 'https:', 'mailto:', 'tel:'] as const;
 
 // ID prefixes (PLAN 11.1).
 export const ID_PREFIXES = {
