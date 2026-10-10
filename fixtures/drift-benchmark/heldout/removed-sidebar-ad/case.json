@@ -1,0 +1,7 @@
+{
+  "id": "removed-sidebar-ad",
+  "category": "removed",
+  "targetBefore": ".ad-slot",
+  "expectedAfter": null,
+  "notes": "The sidebar advertisement block is deleted outright; no element retains its class, text or structure. The correct outcome is not_found, not a near-match on the topics block that shifts up."
+}

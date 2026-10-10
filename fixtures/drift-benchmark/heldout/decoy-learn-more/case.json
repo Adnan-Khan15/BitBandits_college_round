@@ -1,0 +1,7 @@
+{
+  "id": "decoy-learn-more",
+  "category": "decoy",
+  "targetBefore": "a.card-link[href=\"/posts/self-healing-locators\"]",
+  "expectedAfter": "a.card-link[href=\"/posts/self-healing-locators\"]",
+  "notes": "A look-alike Learn more link with the same text and a shared class appears in a new sponsored promo slot at the end of the list. The correct answer stays the original article's link: href, ancestor chain and position discriminate it from the decoy. Returning the decoy is a wrong-target; ambiguous is acceptable but not preferred."
+}

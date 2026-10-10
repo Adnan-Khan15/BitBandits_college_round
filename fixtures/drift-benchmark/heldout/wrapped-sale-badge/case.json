@@ -1,0 +1,7 @@
+{
+  "id": "wrapped-sale-badge",
+  "category": "wrapped",
+  "targetBefore": ".badge",
+  "expectedAfter": ".badge",
+  "notes": "Shop badge keeps its class and text but is wrapped in a new span.badge-slot. Ancestor chain and sibling index change; the badge remains the only element with class 'badge' on the page."
+}

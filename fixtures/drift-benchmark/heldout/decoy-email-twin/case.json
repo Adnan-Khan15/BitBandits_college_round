@@ -1,0 +1,7 @@
+{
+  "id": "decoy-email-twin",
+  "category": "decoy",
+  "targetBefore": "#email",
+  "expectedAfter": "#email",
+  "notes": "The settings form gains a twin email input directly below the original: same tag, class, type and a similar placeholder, different id and label text. The correct answer stays the original #email; selecting the confirm twin is a wrong-target. Id equality plus the label's exact text should carry the match."
+}

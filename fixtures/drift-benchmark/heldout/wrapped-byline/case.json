@@ -1,0 +1,7 @@
+{
+  "id": "wrapped-byline",
+  "category": "wrapped",
+  "targetBefore": ".byline",
+  "expectedAfter": ".byline",
+  "notes": "Blog byline keeps its class and text but is wrapped in a new figure.author-card > figcaption.author-meta, so its parent and ancestor chain change. Id is absent, so text plus ancestors must carry the match."
+}

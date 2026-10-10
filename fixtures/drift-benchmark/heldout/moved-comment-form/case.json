@@ -1,0 +1,7 @@
+{
+  "id": "moved-comment-form",
+  "category": "moved",
+  "targetBefore": "#comment-form",
+  "expectedAfter": "#comment-form",
+  "notes": "Comment form keeps its id, classes, text and field structure but moves from a section under the article into the sidebar. Ancestors, sibling index and neighbours change; identity features do not."
+}

@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Overview — Northwind Ops</title>
+</head>
+<body>
+  <div class="app-shell">
+    <header class="site-header">
+      <a class="logo" href="/">Northwind Ops</a>
+      <nav class="topnav">
+        <a class="topnav__link" href="/">Overview</a>
+        <a class="topnav__link" href="/orders">Orders</a>
+      </nav>
+    </header>
+
+    <div class="app-body">
+      <aside class="app-sidebar">
+        <a class="app-sidebar__link" href="/">Overview</a>
+        <a class="app-sidebar__link" href="/orders">Orders</a>
+        <a class="app-sidebar__link app-sidebar__link--active" href="/profile">Profile</a>
+        <a class="app-sidebar__link" href="/settings">Settings</a>
+      </aside>
+
+      <main class="container">
+        <h1 class="page-title">Overview</h1>
+        <p class="page-subtitle">Last 7 days across all warehouses.</p>
+
+        <section class="kpi-row" aria-label="Key metrics">
+          <div class="metric-card" id="kpi-revenue">
+            <h2 class="metric-label">Revenue</h2>
+            <p class="metric-value">₹42,180</p>
+          </div>
+          <div class="metric-tile" id="kpi-orders">
+            <h2 class="metric-label">Orders</h2>
+            <p class="metric-value">318</p>
+          </div>
+        </section>
+
+        <section class="panel">
+          <h2 class="panel-title">Recent shipments</h2>
+          <table class="data-table">
+            <thead>
+              <tr><th>Order</th><th>Destination</th><th>Status</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>#NW-1042</td><td>Pune</td><td>In transit</td></tr>
+              <tr><td>#NW-1041</td><td>Surat</td><td>Delivered</td></tr>
+            </tbody>
+          </table>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <footer class="site-footer">© 2026 Northwind Ops</footer>
+</body>
+</html>
