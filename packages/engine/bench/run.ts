@@ -114,11 +114,8 @@ function evaluate(method: Method, fp: ElementFingerprint, c: Case): Outcome {
         resolveAnchor(after, 'anchor', fp, { mode: 'smart', thresholds: THRESHOLDS }),
       );
     case 'patchwork_llm':
-      // Assist changes only ambiguous anchors, and only when PW_ASSIST_PROVIDER is set.
-      // With no provider configured this is identical to `patchwork`.
-      return confidentFromResolution(
-        resolveAnchor(after, 'anchor', fp, { mode: 'smart', thresholds: THRESHOLDS }),
-      );
+      // Not run: no model is called in this build, so a row would only repeat `patchwork`.
+      throw new Error('patchwork_llm is not benchmarked (no assist provider is wired up)');
   }
 }
 
@@ -173,7 +170,6 @@ function toRow(method: Method, set: SetName, t: Tally): BenchRow {
 
 const METHODS: Method[] = [
   'patchwork',
-  'patchwork_llm',
   'css_selector',
   'xpath',
   'best_match_no_threshold',
