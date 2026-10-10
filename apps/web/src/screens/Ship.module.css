@@ -1,0 +1,291 @@
+.ship {
+  max-width: 72rem;
+}
+
+.head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+.liveNow {
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: var(--fs-s);
+}
+
+.liveDot {
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 50%;
+  background: var(--healthy);
+}
+
+/* ---- pipeline: a real sequence, drawn as one ---- */
+
+.pipeline {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: none;
+}
+
+.node {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.75rem 0.9rem 0.8rem;
+  border: 1px solid var(--line);
+  border-left-width: 0;
+  background: var(--surface);
+  transition: background-color 400ms ease, border-color 400ms ease;
+}
+
+.node:first-child {
+  border-left-width: 1px;
+  border-radius: 4px 0 0 4px;
+}
+
+.node:last-child {
+  border-radius: 0 4px 4px 0;
+}
+
+.nodeGlyph {
+  font-size: var(--fs-l);
+  line-height: 1;
+  color: var(--ink-3);
+}
+
+.nodeTitle {
+  font-weight: 620;
+  font-size: var(--fs-s);
+}
+
+.nodeDetail {
+  font-size: var(--fs-xs);
+  color: var(--ink-2);
+}
+
+.done {
+  background: var(--healthy-soft);
+  border-color: #b4dccd;
+}
+
+.done .nodeGlyph {
+  color: var(--healthy);
+}
+
+.running {
+  background: var(--blueprint-soft);
+}
+
+.running .nodeGlyph {
+  color: var(--blueprint);
+}
+
+.failed {
+  background: var(--broken-soft);
+  border-color: #e7b9a3;
+}
+
+.failed .nodeGlyph {
+  color: var(--broken);
+}
+
+@media (max-width: 900px) {
+  .pipeline {
+    grid-template-columns: 1fr;
+  }
+
+  .node,
+  .node:first-child,
+  .node:last-child {
+    border-left-width: 1px;
+    border-radius: 0;
+  }
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 1rem 0 0.5rem;
+}
+
+.force {
+  padding: 0.75rem 0.9rem;
+  border: 1px dashed var(--broken);
+  border-radius: 4px;
+}
+
+.field {
+  flex: 1 1 18rem;
+  min-width: 0;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: #fff;
+  font: inherit;
+  font-size: var(--fs-s);
+}
+
+.block {
+  margin-top: 2rem;
+}
+
+.block > h2 {
+  margin-bottom: 0.6rem;
+}
+
+.small {
+  font-size: var(--fs-xs);
+  color: var(--ink-2);
+}
+
+.checks {
+  margin: 0.5rem 0 1rem;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--surface);
+}
+
+.checks li {
+  display: flex;
+  gap: 0.6rem;
+  padding: 0.5rem 0.75rem;
+  font-size: var(--fs-s);
+}
+
+.checks li + li {
+  border-top: 1px solid var(--line);
+}
+
+.checkFailed {
+  background: var(--broken-soft);
+}
+
+.visual {
+  margin-top: 1rem;
+}
+
+.visualHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
+.toggle {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: var(--fs-s);
+}
+
+.compare {
+  margin: 0;
+}
+
+.compare img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--line-strong);
+  border-radius: 4px;
+  background: #fff;
+}
+
+.slider {
+  position: relative;
+}
+
+.after {
+  position: absolute;
+  inset: 0;
+}
+
+.splitLine {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  margin-left: -1px;
+  background: var(--patch);
+  pointer-events: none;
+}
+
+.range {
+  width: 100%;
+  margin: 0.5rem 0 0.25rem;
+  accent-color: var(--patch);
+}
+
+.scroll {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.fixes {
+  max-width: 34ch;
+  color: var(--ink-2);
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.timeline {
+  margin: 0;
+  padding: 0 0 0 1rem;
+  list-style: none;
+  border-left: 1px solid var(--line-strong);
+}
+
+.event {
+  position: relative;
+  display: flex;
+  gap: 0.75rem;
+  padding: 0 0 0.8rem 0.75rem;
+  font-size: var(--fs-s);
+}
+
+.event::before {
+  content: '';
+  position: absolute;
+  left: -1.33rem;
+  top: 0.4rem;
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 50%;
+  background: var(--paper);
+  border: 2px solid var(--ink-3);
+}
+
+.eventAuto::before {
+  border-color: var(--broken);
+  background: var(--broken-soft);
+}
+
+.eventTime {
+  flex-shrink: 0;
+  width: 3.2rem;
+  color: var(--ink-3);
+}

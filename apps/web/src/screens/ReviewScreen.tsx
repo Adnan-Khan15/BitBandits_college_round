@@ -1,82 +1,46 @@
 // apps/web/src/screens/ReviewScreen.tsx (owner: Dev D)
-// Review & merge (F3): patches waiting for review or merge, their operations, conflict check,
-// approve / request changes, and merge with an explicit choice when a conflict blocks it.
+// Review: the inbox of fixes waiting for a teammate. Each fix in plain words, a conflict check on
+// the element itself, and actions that say who does them ("Approve as Vishwaa").
 import { useState } from 'react';
 import type { Conflict, ConflictReport, ConflictResolutionChoice, Patch, User } from '@patchwork/shared';
 import { api, isApiClientError } from '../api.js';
 import { usePoll } from '../usePoll.js';
 import { EmptyState, ErrorNotice, Notice } from '../components/Notice.js';
 import { Chip, PatchStatusChip } from '../components/StatusChip.js';
+import { actAs, nameOf, personFor, ROLE_LABEL } from '../team.js';
 import { useCurrentUserId } from '../user.js';
-import { describePatchOp, firstProject, formatWhen, useAction } from './shared.js';
+import { anchorLabel, describePatchOp, firstProject, formatWhen, propertyWords } from './shared.js';
+import { stepText } from '../studio/fixes.js';
 import styles from './Screens.module.css';
 
 interface ReviewData {
   projectId: string | null;
-  patches: Patch[];
+  waiting: Patch[];
   all: Patch[];
   users: User[];
 }
 
-function ConflictCard({
-  conflict,
-  titleOf,
-  onOverride,
-  busy,
-}: {
-  conflict: Conflict;
-  titleOf: (id: string) => string;
-  onOverride?: () => void;
-  busy: boolean;
-}) {
-  const blocking = conflict.severity === 'blocking';
-  const [candidate, existing] = conflict.patchIds;
-  return (
-    <div className={`${styles.conflict} ${blocking ? styles.conflictBlocking : ''}`}>
-      <div className={styles.conflictHead}>
-        <strong>{conflict.type.replace(/_/g, ' ').toLowerCase()}</strong>
-        <Chip tone={blocking ? 'broken' : 'atrisk'} glyph={blocking ? '✕' : '!'}>
-          {blocking ? 'blocks merge' : 'warning'}
-        </Chip>
-      </div>
-      <div>{conflict.message}</div>
-      <dl className={styles.values}>
-        <dt>This patch</dt>
-        <dd>{titleOf(candidate)}</dd>
-        {existing ? (
-          <>
-            <dt>Already merged</dt>
-            <dd>{titleOf(existing)}</dd>
-          </>
-        ) : null}
-        {conflict.property ? (
-          <>
-            <dt>Property</dt>
-            <dd>{conflict.property}</dd>
-          </>
-        ) : null}
-        {conflict.values ? (
-          <>
-            <dt>Values</dt>
-            <dd>
-              merged “{conflict.values.existing ?? '—'}”, this patch “{conflict.values.candidate ?? '—'}”
-            </dd>
-          </>
-        ) : null}
-        {conflict.elementPath ? (
-          <>
-            <dt>Element</dt>
-            <dd className="mono-id">{conflict.elementPath}</dd>
-          </>
-        ) : null}
-      </dl>
-      {onOverride ? (
-        <button className="btn btn--primary" type="button" disabled={busy} onClick={onOverride}>
-          Merge with this patch overriding
-        </button>
-      ) : null}
-    </div>
-  );
+const cap = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
+
+/** "Adnan's “Fix price typo” also changes the text of “₹12,99”: theirs ₹1,299, this fix ₹1,199." */
+function conflictSentence(c: Conflict, all: Patch[], users: User[], candidate: Patch): string {
+  const other = c.patchIds[1] ? all.find((p) => p.id === c.patchIds[1]) : null;
+  const elementName = anchorLabel(candidate.anchors, Object.keys(candidate.anchors)[0] ?? 'a1');
+  if (!other) {
+    if (c.type === 'UNRESOLVED_TARGET') return "This fix's element can't be found on the current page any more.";
+    if (c.type === 'AMBIGUOUS_TARGET') return "This fix's element matches more than one thing on the page.";
+    return c.message;
+  }
+  const who = `${nameOf(users, other.authorId)}'s “${other.title}”`;
+  const values =
+    c.values && (c.values.existing !== null || c.values.candidate !== null)
+      ? `: theirs ${c.values.existing ?? '—'}, this fix ${c.values.candidate ?? '—'}`
+      : '';
+  if (c.type === 'TEXT_OVERWRITES_CHILD') return `${who} edits something inside ${elementName}, and this fix replaces its whole text.`;
+  if (c.type === 'EDIT_HIDDEN') return `${who} hides ${elementName}, so this change may never be seen.`;
+  if (c.type === 'INSERT_ORDER') return `${who} also adds content at the same spot.`;
+  if (c.type === 'STALE_BASE') return `${elementName} changed since this fix was made${values}.`;
+  return `${who} also ${propertyWords(c.property)} ${elementName}${values}.`;
 }
 
 export function ReviewScreen() {
@@ -85,81 +49,83 @@ export function ReviewScreen() {
   const [comment, setComment] = useState('');
   const [report, setReport] = useState<ConflictReport | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<unknown>(null);
 
-  const { data, error, loading, reload } = usePoll<ReviewData>(async () => {
+  const { data, error: loadError, loading, reload } = usePoll<ReviewData>(async () => {
     const [project, users] = await Promise.all([firstProject(), api.users()]);
-    if (!project) return { projectId: null, patches: [], all: [], users: users.items };
+    if (!project) return { projectId: null, waiting: [], all: [], users: users.items };
     const all = (await api.patches(project.id)).items;
-    const waiting = all.filter((p) => p.status === 'in_review' || p.status === 'approved');
-    return { projectId: project.id, patches: waiting, all, users: users.items };
+    const waiting = all.filter((p) => p.status === 'in_review' || p.status === 'approved' || p.status === 'changes_requested');
+    return { projectId: project.id, waiting, all, users: users.items };
   });
-  const action = useAction(reload);
 
-  if (loading && !data) return <p className={styles.small}>Loading patches for review…</p>;
-  if (error) return <ErrorNotice error={error} />;
-  if (!data?.projectId) return <EmptyState>No project yet. Run <code>npm run reset</code> to seed ShopLite.</EmptyState>;
+  if (loading && !data) return <p className={styles.small}>Loading the review inbox…</p>;
+  if (loadError) return <ErrorNotice error={loadError} />;
+  if (!data?.projectId) return <EmptyState>No project yet. Run <code>./demo.sh</code> to seed ShopLite.</EmptyState>;
 
-  const { patches, all, users, projectId } = data;
-  const selected = patches.find((p) => p.id === selectedId) ?? patches[0] ?? null;
-  const nameOf = (id: string) => users.find((u) => u.id === id)?.name ?? id;
-  const titleOf = (id: string) => all.find((p) => p.id === id)?.title ?? id;
-  const isAuthor = selected !== null && selected.authorId === userId;
+  const { waiting, all, users, projectId } = data;
+  const selected = waiting.find((p) => p.id === selectedId) ?? waiting[0] ?? null;
+  const reviewer = personFor(users, 'reviewer');
+  const reviewerLabel = reviewer ? `${reviewer.name} (${ROLE_LABEL.reviewer})` : 'the reviewer';
+
+  const doAs = async (label: string, who: User | null, fn: () => Promise<unknown>) => {
+    setBusy(label);
+    setError(null);
+    try {
+      if (who) await actAs(who.id, fn);
+      else await fn();
+      reload();
+    } catch (err) {
+      setError(err);
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const merge = async (patch: Patch, choices: ConflictResolutionChoice[]) => {
+    setNotice(null);
+    setBusy('merge');
+    setError(null);
+    try {
+      if (reviewer) await actAs(reviewer.id, () => api.mergePatch(patch.id, { choices }));
+      else await api.mergePatch(patch.id, { choices });
+      setReport(null);
+      setNotice(`“${patch.title}” is merged. It goes out with the next release on Ship.`);
+      reload();
+    } catch (err) {
+      if (isApiClientError(err) && err.code === 'MERGE_BLOCKED' && err.details) setReport(err.details as ConflictReport);
+      else setError(err);
+    } finally {
+      setBusy(null);
+    }
+  };
 
   const select = (id: string) => {
     setSelectedId(id);
     setReport(null);
     setNotice(null);
-    action.setError(null);
+    setError(null);
   };
-
-  const merge = async (patch: Patch, choices: ConflictResolutionChoice[]) => {
-    setNotice(null);
-    try {
-      await api.mergePatch(patch.id, { choices });
-      setReport(null);
-      setNotice(`Merged “${patch.title}”. It is now in head and goes out with the next release.`);
-      action.setError(null);
-      reload();
-    } catch (err) {
-      if (isApiClientError(err) && err.code === 'MERGE_BLOCKED' && err.details) {
-        setReport(err.details as ConflictReport);
-        action.setError(null);
-      } else {
-        action.setError(err);
-      }
-    }
-  };
-
-  const overrideAll = (patch: Patch, r: ConflictReport) =>
-    merge(
-      patch,
-      r.conflicts
-        .filter((c) => c.severity === 'blocking')
-        .map((c) => ({ conflictId: c.id, choice: 'candidate_overrides' as const, note: 'Reviewer chose: this patch overrides' })),
-    );
 
   return (
     <section>
       <div className={styles.head}>
-        <h1>Review &amp; merge</h1>
+        <h1>Review</h1>
       </div>
       <p className={styles.lede}>
-        Patches waiting for a decision. Conflicts are checked on the element itself, against everything
-        already merged. Authors cannot approve or merge their own patch.
+        Fixes waiting for a teammate. Conflicts are checked on the element itself, against every fix already merged.
+        Nobody can approve their own fix.
       </p>
 
-      {notice ? (
-        <div className={styles.stack} style={{ marginBottom: '1rem' }} aria-live="polite">
-          <Notice title="Merged">{notice}</Notice>
-        </div>
-      ) : null}
+      <div aria-live="polite">{notice ? <Notice title="Merged">{notice}</Notice> : null}</div>
 
-      {patches.length === 0 ? (
-        <EmptyState>Nothing to review. Submitted patches appear here.</EmptyState>
+      {waiting.length === 0 ? (
+        <EmptyState>Nothing waiting for review. Fixes sent from the Studio land here.</EmptyState>
       ) : (
         <div className={styles.split}>
-          <ul className={styles.list} aria-label="Patches to review">
-            {patches.map((p) => (
+          <ul className={styles.list} aria-label="Fixes waiting for review">
+            {waiting.map((p) => (
               <li key={p.id} className={styles.listItem}>
                 <button
                   type="button"
@@ -170,7 +136,9 @@ export function ReviewScreen() {
                   <strong>{p.title}</strong>
                   <span className={styles.listMeta}>
                     <PatchStatusChip status={p.status} />
-                    <span>{nameOf(p.authorId)}</span>
+                    <span>
+                      {nameOf(users, p.authorId)}, {p.urlPath}, {formatWhen(p.updatedAt)}
+                    </span>
                   </span>
                 </button>
               </li>
@@ -184,141 +152,151 @@ export function ReviewScreen() {
                 <PatchStatusChip status={selected.status} />
               </div>
               <div className={styles.meta}>
-                By {nameOf(selected.authorId)} on <span className="mono-id">{selected.urlPath}</span>, revision{' '}
-                <span className="num">{selected.revision}</span>, updated {formatWhen(selected.updatedAt)}
+                By {nameOf(users, selected.authorId)} on the {selected.urlPath} page, {formatWhen(selected.updatedAt)}
               </div>
               {selected.description ? <p className="prose">{selected.description}</p> : null}
 
-              <h3 className={styles.subhead}>Operations</h3>
-              <div className={styles.scroll}>
-              <table className="table">
-                <tbody>
-                  {selected.ops.map((op, i) => (
-                    <tr key={i}>
-                      <td className="num">{i + 1}</td>
-                      <td>{describePatchOp(op)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              </div>
+              <h3 className={styles.subhead}>What it changes</h3>
+              <ul className={styles.plainList}>
+                {selected.ops.map((op, i) => (
+                  <li key={i}>{describePatchOp(op, selected.anchors)}</li>
+                ))}
+              </ul>
 
-              <h3 className={styles.subhead}>Checks run before release</h3>
+              <h3 className={styles.subhead}>How a browser will check it</h3>
               {selected.checks.length === 0 ? (
-                <p className={styles.small}>No checks. Verification will only confirm the patch applies.</p>
+                <p className={styles.small}>No checks. The browser test only confirms the fix applies cleanly.</p>
               ) : (
-                <ol className={styles.small}>
+                <ul className={styles.plainList}>
                   {selected.checks.map((c, i) => (
-                    <li key={i}>
-                      {c.action} {'target' in c ? c.target : ''} {'contains' in c ? `“${c.contains}”` : ''}
-                      {'path' in c ? c.path : ''}
-                    </li>
+                    <li key={i}>{cap(stepText(c).replace('the picked element', anchorLabel(selected.anchors, 'a1')))}</li>
                   ))}
-                </ol>
+                </ul>
               )}
-
-              {isAuthor ? (
-                <Notice>You wrote this patch, so switch to the Reviewer to approve or merge it.</Notice>
-              ) : null}
 
               <div className={styles.actions}>
                 <button
                   className="btn"
                   type="button"
-                  disabled={action.busy !== null}
+                  disabled={busy !== null}
                   onClick={() =>
-                    void action.run('conflicts', async () => setReport(await api.conflicts(projectId, [selected.id])))
+                    void doAs('conflicts', null, async () => setReport(await api.conflicts(projectId, [selected.id])))
                   }
                 >
-                  Check conflicts
+                  Check for conflicts
                 </button>
                 {selected.status === 'in_review' ? (
                   <button
                     className="btn btn--primary"
                     type="button"
-                    disabled={action.busy !== null || isAuthor}
+                    disabled={busy !== null || selected.authorId === reviewer?.id}
                     onClick={() =>
-                      void action.run('approve', () =>
+                      void doAs('approve', reviewer, () =>
                         api.reviewPatch(selected.id, { decision: 'approve', comment: comment || 'Approved.' }),
                       )
                     }
                   >
-                    Approve
+                    Approve as {reviewerLabel}
                   </button>
                 ) : null}
                 {selected.status === 'approved' ? (
-                  <button
-                    className="btn btn--primary"
-                    type="button"
-                    disabled={action.busy !== null || isAuthor}
-                    onClick={() => void merge(selected, [])}
-                  >
-                    Merge
+                  <button className="btn btn--primary" type="button" disabled={busy !== null} onClick={() => void merge(selected, [])}>
+                    {busy === 'merge' ? 'Merging…' : `Merge as ${reviewer?.name ?? 'the reviewer'}`}
                   </button>
                 ) : null}
               </div>
-              <div className={styles.actions}>
-                <input
-                  className={styles.field}
-                  name="review-comment"
-                  autoComplete="off"
-                  value={comment}
-                  onChange={(e) => setComment(e.target.value)}
-                  placeholder="What should change? e.g. use the sale price from the brief…"
-                  aria-label="Review comment"
-                />
-                <button
-                  className="btn"
-                  type="button"
-                  disabled={action.busy !== null || isAuthor || comment.trim() === ''}
-                  onClick={() =>
-                    void action.run('changes', async () => {
-                      await api.reviewPatch(selected.id, { decision: 'request_changes', comment });
-                      setComment('');
-                    })
-                  }
-                >
-                  Request changes
-                </button>
-              </div>
+              {selected.status !== 'changes_requested' ? (
+                <div className={styles.actions}>
+                  <input
+                    className={styles.field}
+                    value={comment}
+                    onChange={(e) => setComment(e.target.value)}
+                    placeholder="What should the author change? e.g. keep the button on the cart…"
+                    aria-label="Comment for the author"
+                    name="review-comment"
+                    autoComplete="off"
+                  />
+                  <button
+                    className="btn"
+                    type="button"
+                    disabled={busy !== null || comment.trim() === ''}
+                    onClick={() =>
+                      void doAs('changes', reviewer, async () => {
+                        await api.reviewPatch(selected.id, { decision: 'request_changes', comment });
+                        setComment('');
+                      })
+                    }
+                  >
+                    Ask {nameOf(users, selected.authorId)} to change it
+                  </button>
+                </div>
+              ) : (
+                <Notice>Waiting for {nameOf(users, selected.authorId)} to update this fix.</Notice>
+              )}
+              {userId === selected.authorId ? (
+                <p className={styles.small}>You wrote this fix, so the buttons act as {reviewerLabel}.</p>
+              ) : null}
 
-              {action.error ? <ErrorNotice error={action.error} /> : null}
+              {error ? <ErrorNotice error={error} /> : null}
 
               {report ? (
-                <>
+                <div className={styles.block} aria-live="polite">
                   <h3 className={styles.subhead}>
-                    Conflict check against {report.againstIds.length} merged patch
-                    {report.againstIds.length === 1 ? '' : 'es'}
+                    Checked against {report.againstIds.length} merged fix{report.againstIds.length === 1 ? '' : 'es'} on this page
                   </h3>
                   {report.conflicts.length === 0 ? (
-                    <Notice>No conflicts on this page. Safe to merge.</Notice>
+                    <Notice>No conflicts. Safe to merge.</Notice>
                   ) : (
                     <div className={styles.stack}>
-                      {report.blocking ? (
-                        <Notice tone="error" title="Merge blocked">
-                          A blocking conflict needs a decision. Choose to let this patch override, or ask the
-                          author to edit it.
-                        </Notice>
-                      ) : null}
-                      {report.conflicts.map((c) => (
-                        <ConflictCard
-                          key={c.id}
-                          conflict={c}
-                          titleOf={titleOf}
-                          busy={action.busy !== null}
-                          onOverride={
-                            selected.status === 'approved' &&
-                            c.severity === 'blocking' &&
-                            c.resolutions.includes('candidate_overrides') &&
-                            !isAuthor
-                              ? () => void overrideAll(selected, report)
-                              : undefined
-                          }
-                        />
-                      ))}
+                      {report.conflicts.map((c) => {
+                        const blocking = c.severity === 'blocking';
+                        return (
+                          <div key={c.id} className={`${styles.conflict} ${blocking ? styles.conflictBlocking : ''}`}>
+                            <div className={styles.conflictHead}>
+                              <Chip tone={blocking ? 'broken' : 'atrisk'} glyph={blocking ? '✕' : '!'}>
+                                {blocking ? 'blocks the merge' : 'worth a look'}
+                              </Chip>
+                            </div>
+                            <p>{conflictSentence(c, all, users, selected)}</p>
+                            {blocking && selected.status === 'approved' ? (
+                              <div className={styles.actions}>
+                                {c.resolutions.includes('candidate_overrides') ? (
+                                  <button
+                                    className="btn btn--primary"
+                                    type="button"
+                                    disabled={busy !== null}
+                                    onClick={() =>
+                                      void merge(selected, [
+                                        { conflictId: c.id, choice: 'candidate_overrides', note: `${reviewer?.name ?? 'Reviewer'} kept this fix` },
+                                      ])
+                                    }
+                                  >
+                                    Keep this fix (it overrides)
+                                  </button>
+                                ) : null}
+                                <button
+                                  className="btn"
+                                  type="button"
+                                  disabled={busy !== null}
+                                  onClick={() =>
+                                    void doAs('changes', reviewer, () =>
+                                      api.reviewPatch(selected.id, {
+                                        decision: 'request_changes',
+                                        comment: `Conflicts with another fix: ${conflictSentence(c, all, users, selected)}`,
+                                      }),
+                                    )
+                                  }
+                                >
+                                  Ask {nameOf(users, selected.authorId)} to change it
+                                </button>
+                              </div>
+                            ) : null}
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
-                </>
+                </div>
               ) : null}
             </div>
           ) : null}

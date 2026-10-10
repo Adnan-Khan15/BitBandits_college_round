@@ -1,7 +1,7 @@
 // apps/web/src/screens/shared.ts (owner: Dev D)
 // Small helpers shared by the Review, Releases and Drift & Audit screens.
 import { useCallback, useState } from 'react';
-import type { PatchOp, Project } from '@patchwork/shared';
+import type { ElementFingerprint, PatchOp, Project } from '@patchwork/shared';
 import { api } from '../api.js';
 
 export function formatWhen(iso: string): string {
@@ -22,12 +22,21 @@ export async function firstProject(): Promise<Project | null> {
   return (await api.projects()).items[0] ?? null;
 }
 
-/** One-line, human description of a patch operation. */
-export function describePatchOp(op: PatchOp): string {
-  const t = op.target.anchor;
+/** Human name of an anchor: its visible text, else its accessible name, else its tag. */
+export function anchorLabel(anchors: Record<string, ElementFingerprint> | undefined, key: string): string {
+  const fp = anchors?.[key];
+  if (!fp) return 'an element';
+  const text = fp.text || fp.accessibleName || '';
+  if (!text) return `the ${fp.tag}`;
+  return `“${text.length > 36 ? `${text.slice(0, 36)}…` : text}”`;
+}
+
+/** One-line, human description of a patch operation, naming elements by their text. */
+export function describePatchOp(op: PatchOp, anchors?: Record<string, ElementFingerprint>): string {
+  const t = anchorLabel(anchors, op.target.anchor);
   switch (op.kind) {
     case 'setText':
-      return `Set text of ${t} to “${op.value}”`;
+      return `Change the text of ${t} to “${op.value}”`;
     case 'setAttribute':
       return `Set ${op.name} of ${t} to “${op.value}”`;
     case 'removeAttribute':
@@ -39,16 +48,29 @@ export function describePatchOp(op: PatchOp): string {
     case 'show':
       return `Show ${t}`;
     case 'move':
-      return `Move ${t} ${op.position} ${op.reference.anchor}`;
+      return `Move ${t} ${op.position} ${anchorLabel(anchors, op.reference.anchor)}`;
     case 'insertHTML':
-      return `Insert HTML ${op.position} ${t}`;
+      return `Add a note ${op.position.includes('before') ? 'before' : 'after'} ${t}`;
     case 'setBehavior': {
       const a = op.action;
-      const what =
-        a.type === 'navigate' ? `go to ${a.url}` : a.type === 'preventDefault' ? 'do nothing' : `${a.type} ${'target' in a ? a.target.anchor : ''}`;
-      return `On ${op.event} of ${t}, ${op.mode === 'replace' ? 'instead' : 'first'} ${what}`;
+      if (a.type === 'navigate') return `Make ${t} go to ${a.url} when clicked`;
+      if (a.type === 'preventDefault') return `Make clicking ${t} do nothing`;
+      return `When ${t} is clicked, ${a.type} ${anchorLabel(anchors, a.target.anchor)}`;
     }
   }
+}
+
+/** What a conflicting property means, in words. */
+export function propertyWords(property: string | null): string {
+  if (!property) return 'changes';
+  if (property === 'text') return 'changes the text of';
+  if (property === 'visibility') return 'shows or hides';
+  if (property === 'position') return 'moves';
+  if (property.startsWith('behavior:')) return 'changes what happens when you click';
+  if (property.startsWith('style:')) return `changes the ${property.slice(6)} of`;
+  if (property.startsWith('attr:')) return `changes the ${property.slice(5)} of`;
+  if (property.startsWith('insert:')) return 'adds content at the same spot as';
+  return 'changes';
 }
 
 /** Runs one user action at a time, keeping its error for an ErrorNotice. */

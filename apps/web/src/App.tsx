@@ -6,7 +6,7 @@ import { Header } from './components/Header.js';
 import { Notice } from './components/Notice.js';
 import { StudioScreen } from './studio/StudioScreen.js';
 import { ReviewScreen } from './screens/ReviewScreen.js';
-import { ReleasesScreen } from './screens/ReleasesScreen.js';
+import { ShipScreen } from './screens/ShipScreen.js';
 import { DriftAuditScreen } from './screens/DriftAuditScreen.js';
 import { ensureDefaultUser } from './team.js';
 import styles from './App.module.css';
@@ -42,7 +42,7 @@ export function App() {
       <main className={section === 'studio' ? styles.full : styles.main}>
         {section === 'studio' ? <StudioScreen /> : null}
         {section === 'review' ? <ReviewScreen /> : null}
-        {section === 'ship' ? <ReleasesScreen /> : null}
+        {section === 'ship' ? <ShipScreen /> : null}
         {section === 'drift' || section === 'history' ? <DriftAuditScreen /> : null}
         {!known.includes(section) ? (
           <Notice tone="error" title="Page not found">
