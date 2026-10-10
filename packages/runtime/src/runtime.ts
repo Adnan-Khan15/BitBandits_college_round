@@ -120,7 +120,11 @@ async function bootstrap(): Promise<void> {
     if (status) bridge.postReady(status);
     window.dispatchEvent(new CustomEvent('patchwork:ready'));
 
-    if (m.channel === 'preview') installBadge(patches.filter((p) => p.applied).length);
+    // The badge is for someone who opened a preview link directly. Inside the Studio frame, or in a
+    // verification browser (pw_nobadge cookie), it would cover the page and show up in screenshots.
+    const embedded = window.top !== window;
+    const noBadge = /(?:^|;\s*)pw_nobadge=1/.test(document.cookie);
+    if (m.channel === 'preview' && !embedded && !noBadge) installBadge(patches.filter((p) => p.applied).length);
 
     window.addEventListener('error', (event) => {
       const ev = event as ErrorEvent;
