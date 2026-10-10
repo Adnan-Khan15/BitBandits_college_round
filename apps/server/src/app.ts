@@ -149,7 +149,7 @@ export function buildControlApp(opts: AppOptions): FastifyInstance {
 
   // --- B's and C's route plugins --------------------------------------------
   registerSnapshotRoutes(app, registry);
-  registerVerifyRoutes(app, registry);
+  registerVerifyRoutes(app, registry, opts.env);
   registerReleaseRoutes(app, registry, db);
   registerDriftRoutes(app, registry);
 

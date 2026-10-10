@@ -2,8 +2,8 @@
 // Needs running servers: `npm run target` and `npx tsx apps/server/src/main.ts`
 // (after `npm run reset && npm run build:runtime`).
 // Part 1 (solo Phase 1): gateway injection, live/preview manifests, audit chain.
-// Part 2 (solo Phase 2, server started with PW_SLICE_MODE=1, fresh `npm run reset`): patch ->
-// isolated preview -> review -> merge -> R1 -> deploy -> conflicting patch blocked (409) ->
+// Part 2 (fresh `npm run reset`): patch -> isolated preview -> review -> merge -> R1 ->
+// unverified deploy refused -> verify -> deploy -> conflicting patch blocked (409) ->
 // candidate_overrides -> rollback to none -> audit valid. Rendered text is read with headless
 // Chromium because the runtime applies patches in the browser, not in the proxied HTML.
 import { chromium, type Browser } from 'playwright';
@@ -180,7 +180,18 @@ async function part2(): Promise<void> {
     );
     const r1 = must('release manager creates R1', await api<{ id: string; number: number; patches: unknown[] }>('POST', `/api/projects/${PROJECT}/releases`, 'usr_rm', { note: 'smoke R1' }));
     check('R1 freezes head (1 patch)', r1.patches.length === 1, `R${r1.number}`);
-    must('release manager deploys R1 (PW_SLICE_MODE=1)', await api('POST', `/api/releases/${r1.id}/deploy`, 'usr_rm', { force: false, reason: '' }));
+    check(
+      'unverified R1 cannot deploy (409 VERIFICATION_REQUIRED)',
+      (await api('POST', `/api/releases/${r1.id}/deploy`, 'usr_rm', { force: false, reason: '' })).status === 409,
+    );
+    const run = must('release manager verifies R1', await api<{ id: string }>('POST', `/api/releases/${r1.id}/verify`, 'usr_rm'));
+    let verified = '';
+    for (let i = 0; i < 90 && !['passed', 'failed', 'error'].includes(verified); i++) {
+      await new Promise((r) => setTimeout(r, 1000));
+      verified = (await api<{ status: string }>('GET', `/api/verifications/${run.id}`, null)).body.status;
+    }
+    check('R1 verification passed', verified === 'passed', verified);
+    must('release manager deploys verified R1', await api('POST', `/api/releases/${r1.id}/deploy`, 'usr_rm', { force: false, reason: '' }));
     check('live manifest carries R1 (1 patch)', (await livePatchCount()) === 1);
     check('live :4100 now shows patch A', (await renderedText(browser, `${LIVE}/`, SELECTOR)) === TEXT_A);
 

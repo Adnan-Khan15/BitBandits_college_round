@@ -18,7 +18,7 @@ export function buildRegistry(db: Db, env: Env = loadEnv()): ServiceRegistry {
   registry.audit = createAuditService(db);
   registry.core = createCoreService(db, registry, env);
   registry.snapshots = createSnapshotService(db);
-  registry.verify = createVerifyService(db, registry);
+  registry.verify = createVerifyService(db, registry, env);
   registry.releases = createReleaseService(db, registry, env);
   // Dev B handoff (per PLAN 13.4): the drift service reaches the registry (snapshots,
   // releases, core.proposeHeal) and the db (drift_reports) through these arguments.
