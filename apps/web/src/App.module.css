@@ -4,30 +4,23 @@
   height: 100%;
 }
 
-.body {
-  display: flex;
-  flex: 1;
-  min-height: 0;
-}
-
 .main {
   flex: 1;
-  min-width: 0;
+  min-height: 0;
   padding: 1.5rem 2rem 3rem;
   overflow-y: auto;
 }
 
-/* the workbench reads as an instrument, not a landing page: content is
-   left-aligned, one column, room to compare numbers column-wise */
+/* content screens read as an instrument, not a landing page: left-aligned, one column */
 .main > section {
-  max-width: 68rem;
+  max-width: 72rem;
 }
 
-/* narrow screens: the rail becomes a horizontal strip above the content */
-@media (max-width: 1100px) {
-  .body {
-    flex-direction: column;
-  }
+/* the Studio is the website: it takes the whole remaining viewport */
+.full {
+  flex: 1;
+  min-height: 0;
+  display: flex;
 }
 
 @media (max-width: 600px) {

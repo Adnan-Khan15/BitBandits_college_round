@@ -1,70 +1,65 @@
-import { useEffect, useState } from 'react';
-import type { Role, User } from '@patchwork/shared';
-import { api } from '../api.js';
-import { useCurrentUserId, setCurrentUserId } from '../user.js';
+import { routeHref, useRoute } from '../router.js';
+import { ROLE_LABEL, useTeam } from '../team.js';
+import { setCurrentUserId, useCurrentUserId } from '../user.js';
 import styles from './Header.module.css';
 
-const ROLE_LABEL: Record<Role, string> = {
-  developer: 'developer',
-  reviewer: 'reviewer',
-  release_manager: 'release manager',
-};
+export const NAV = [
+  { to: 'studio', label: 'Studio' },
+  { to: 'review', label: 'Review' },
+  { to: 'ship', label: 'Ship' },
+  { to: 'drift', label: 'Drift Sentinel' },
+  { to: 'history', label: 'History' },
+] as const;
 
-/**
- * Header: the workbench identity strip. The user switcher is the product's
- * only "auth" (PLAN 11.12) so it is always visible, with the role that
- * choice carries — every screen disables what the role cannot do.
- */
-export function Header() {
+/** Header: brand, the five places, and the team bar (who you are acting as, one click to switch). */
+export function Header({ active, inbox }: { active: string; inbox: number | null }) {
+  const team = useTeam();
   const currentUserId = useCurrentUserId();
-  const [users, setUsers] = useState<User[] | null>(null);
-
-  useEffect(() => {
-    let stopped = false;
-    void api
-      .users()
-      .then((res) => {
-        if (!stopped) setUsers(res.items);
-      })
-      .catch(() => {
-        if (!stopped) setUsers([]);
-      });
-    return () => {
-      stopped = true;
-    };
-  }, []);
-
-  const current = users?.find((u) => u.id === currentUserId) ?? null;
+  useRoute();
 
   return (
     <header className={styles.header}>
-      <div className={styles.brand}>
+      <a className={styles.brand} href={routeHref('studio')}>
         <span className={styles.mark} aria-hidden="true" />
         <span className={styles.name}>PATCHWORK</span>
-      </div>
+      </a>
 
-      <div className={styles.user}>
-        <label className={styles.userLabel} htmlFor="user-switcher">
-          Acting as
-        </label>
-        <select
-          id="user-switcher"
-          className={styles.select}
-          value={currentUserId ?? ''}
-          onChange={(event) => setCurrentUserId(event.target.value || null)}
-        >
-          <option value="">pick who you are…</option>
-          {(users ?? []).map((user) => (
-            <option key={user.id} value={user.id}>
-              {user.name} — {ROLE_LABEL[user.role]}
-            </option>
-          ))}
-        </select>
-        {current ? (
-          <span className={styles.role}>{ROLE_LABEL[current.role]}</span>
-        ) : (
-          <span className={styles.hint}>actions need a user</span>
-        )}
+      <nav className={styles.nav} aria-label="Sections">
+        {NAV.map((item) => (
+          <a
+            key={item.to}
+            href={routeHref(item.to)}
+            className={styles.navItem}
+            aria-current={active === item.to ? 'page' : undefined}
+          >
+            {item.label}
+            {item.to === 'review' && inbox ? <span className={`${styles.count} num`}>{inbox}</span> : null}
+          </a>
+        ))}
+      </nav>
+
+      <div className={styles.team} role="group" aria-label="Acting as">
+        {team.map((user) => {
+          const on = user.id === currentUserId;
+          return (
+            <button
+              key={user.id}
+              type="button"
+              className={styles.person}
+              aria-pressed={on}
+              title={`Act as ${user.name} (${ROLE_LABEL[user.role]})`}
+              onClick={() => setCurrentUserId(user.id)}
+            >
+              <span className={`${styles.avatar} ${styles[user.role]}`} aria-hidden="true">
+                {user.name.slice(0, 1)}
+              </span>
+              <span className={styles.who}>
+                <span className={styles.personName}>{user.name}</span>
+                <span className={styles.personRole}>{ROLE_LABEL[user.role]}</span>
+              </span>
+            </button>
+          );
+        })}
       </div>
     </header>
   );
