@@ -18,7 +18,7 @@ export function buildRegistry(db: Db, previewConfig: PreviewConfig = DEFAULT_PRE
   registry.core = createCoreService(db, registry, previewConfig);
   registry.snapshots = createSnapshotService();
   registry.verify = createVerifyService();
-  registry.releases = createReleaseService();
+  registry.releases = createReleaseService(db);
   // Dev B handoff (per PLAN 13.4): the drift service reaches the registry (snapshots,
   // releases, core.proposeHeal) and the db (drift_reports) through these arguments.
   registry.drift = createDriftService(registry, db);
