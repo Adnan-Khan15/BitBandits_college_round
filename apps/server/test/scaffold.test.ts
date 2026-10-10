@@ -57,7 +57,7 @@ describe('scaffold', () => {
 
   it('answers A-owned stub routes with 501 NOT_IMPLEMENTED in the ApiError shape', async () => {
     const app = buildControlApp({ registry: buildRegistry(db), db });
-    const res = await app.inject({ method: 'POST', url: '/api/patches/pat_nope/merge' });
+    const res = await app.inject({ method: 'POST', url: '/api/projects/prj_nope/previews' });
     expect(res.statusCode).toBe(501);
     const body = res.json() as { error: { code: string; requestId: string } };
     expect(body.error.code).toBe('NOT_IMPLEMENTED');

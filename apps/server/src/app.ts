@@ -9,6 +9,7 @@ import type { ServiceRegistry } from '@patchwork/shared';
 import type { Db } from './db/sqlite.js';
 import { installApiErrorHandling } from './core/http.js';
 import { registerCoreRoutes } from './core/routes.js';
+import type { MergeEngine } from './core/merge.js';
 import { registerSnapshotRoutes } from './snapshots/index.js';
 import { registerVerifyRoutes } from './verify/index.js';
 import { registerReleaseRoutes } from './releases/index.js';
@@ -18,9 +19,11 @@ export interface AppOptions {
   registry: ServiceRegistry;
   db: Db;
   logger?: boolean;
+  /** Test seam for T-API-MERGE; production omits it and the real engine is used. */
+  mergeEngine?: MergeEngine;
 }
 
-/** A-owned control routes that are still 501 stubs until Phase 2 (steps 13-14).
+/** A-owned control routes that are still 501 stubs until Phase 2 (step 14).
  *
  * Ownership rule: Dev A registers ONLY A-owned routes here (the rest live in
  * core/routes.ts). Dev B and Dev C register their own routes inside their own
@@ -29,8 +32,6 @@ export interface AppOptions {
  * Unregistered routes answer with the 404 ApiError response from
  * setNotFoundHandler below. */
 export const STUB_ROUTES: Array<Pick<RouteOptions, 'method' | 'url'> & { phase: string }> = [
-  { method: 'POST', url: '/api/patches/:id/merge', phase: 'Phase 2 step 13' },
-  { method: 'POST', url: '/api/projects/:pid/conflicts', phase: 'Phase 2 step 13' },
   { method: 'POST', url: '/api/projects/:pid/previews', phase: 'Phase 2 step 14' },
   { method: 'PUT', url: '/api/previews/:id', phase: 'Phase 2 step 14' },
 ];
@@ -55,8 +56,8 @@ export function buildControlApp(opts: AppOptions): FastifyInstance {
     }
   });
 
-  // --- A-owned routes (users, projects, patches, validate, submit, reviews, audit) --
-  registerCoreRoutes(app, { registry, db });
+  // --- A-owned routes (users, projects, patches, validate, submit, reviews, merge, audit) --
+  registerCoreRoutes(app, { registry, db, engine: opts.mergeEngine });
 
   // --- stub routes (501, ApiError shape); A-owned only (see STUB_ROUTES comment) --
   for (const route of STUB_ROUTES) {

@@ -1,11 +1,15 @@
 // apps/server/src/core/routes.ts (owner: Dev A)
-// Phase 2 step 12: the A-owned control-plane routes (PLAN 11.12).
-// Users/projects moved here from app.ts at scaffold time; patches CRUD, validate,
-// submit, reviews and the audit read routes land in this step. Merge (13),
-// conflicts (13) and previews (14) stay as 501 stubs in app.ts until their steps.
+// The A-owned control-plane routes (PLAN 11.12). Scaffold: users/projects. Step 11:
+// audit reads. Step 12: patches CRUD, validate, submit, reviews. Step 13: the merge
+// gate and the conflict check. Previews (14) stay as 501 stubs in app.ts.
 import type { FastifyInstance } from 'fastify';
 import { AppError, USER_HEADER } from '@patchwork/shared';
-import type { AuditType, PatchStatus, ServiceRegistry } from '@patchwork/shared';
+import type {
+  AuditType,
+  ConflictResolutionChoice,
+  PatchStatus,
+  ServiceRegistry,
+} from '@patchwork/shared';
 import type { Db } from '../db/sqlite.js';
 import {
   addReview,
@@ -17,6 +21,7 @@ import {
   submitPatch,
   updatePatch,
 } from './patches.js';
+import { checkConflicts, mergePatch, type MergeEngine } from './merge.js';
 import { validatePatchBody } from './validate.js';
 
 const STATUSES: PatchStatus[] = [
@@ -30,9 +35,9 @@ const STATUSES: PatchStatus[] = [
 
 export function registerCoreRoutes(
   app: FastifyInstance,
-  opts: { registry: ServiceRegistry; db: Db },
+  opts: { registry: ServiceRegistry; db: Db; engine?: MergeEngine },
 ): void {
-  const { registry, db } = opts;
+  const { registry, db, engine } = opts;
 
   // --- users & projects (real since scaffold) ---------------------------------
   app.get('/api/users', async () => {
@@ -124,6 +129,35 @@ export function registerCoreRoutes(
       comment: string;
     };
     return addReview(db, registry.audit, id, decision, comment ?? '', reviewer.id);
+  });
+
+  // --- merge gate (step 13) ---------------------------------------------------------
+  app.post('/api/patches/:id/merge', async (req) => {
+    const { id } = req.params as { id: string };
+    const actor = requireUser(db, req.headers[USER_HEADER] as string | undefined);
+    const body = (req.body ?? {}) as {
+      choices?: ConflictResolutionChoice[];
+      expectedRevision?: number;
+    };
+    return mergePatch(
+      db,
+      registry.audit,
+      registry,
+      id,
+      { choices: body.choices, expectedRevision: body.expectedRevision },
+      actor.id,
+      engine,
+    );
+  });
+
+  app.post('/api/projects/:pid/conflicts', async (req) => {
+    const { pid } = req.params as { pid: string };
+    if (!registry.core.getProject(pid)) {
+      throw new AppError('NOT_FOUND', `No project ${pid}`);
+    }
+    const { candidateIds } = (req.body ?? {}) as { candidateIds?: string[] };
+    const candidates = (candidateIds ?? []).map((cid) => getPatchOrThrow(db, cid));
+    return checkConflicts(registry, pid, candidates, engine);
   });
 
   // --- audit (service landed in step 11) -------------------------------------------

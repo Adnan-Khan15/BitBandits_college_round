@@ -89,7 +89,7 @@ export function requireUser(db: Db, userId: string | undefined): User {
   return { id: row.id, name: row.name, role: row.role as Role };
 }
 
-function requireReviewer(user: User, patch: Patch): void {
+export function requireReviewer(user: User, patch: Patch): void {
   if (user.role !== 'reviewer' && user.role !== 'release_manager') {
     throw new AppError('FORBIDDEN', `Role ${user.role} cannot review or merge patches`, { role: user.role });
   }
