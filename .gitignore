@@ -46,3 +46,6 @@ test-results/
 playwright-report/
 packages/runtime/dist/
 apps/web/dist/
+
+#Misc
+PLAN.MD

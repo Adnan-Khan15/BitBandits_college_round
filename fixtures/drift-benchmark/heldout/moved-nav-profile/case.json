@@ -1,0 +1,7 @@
+{
+  "id": "moved-nav-profile",
+  "category": "moved",
+  "targetBefore": ".topnav__link--profile",
+  "expectedAfter": ".app-sidebar__link--active",
+  "notes": "Dashboard nav; the profile link leaves the top navigation and reappears in a new app sidebar, with a new class and a new first sibling. Text and href are unchanged; the other sidebar links are decoys."
+}

@@ -1,0 +1,7 @@
+{
+  "id": "removed-field-error",
+  "category": "removed",
+  "targetBefore": "#email-error",
+  "expectedAfter": null,
+  "notes": "The inline validation message and its aria-describedby hook are deleted; the email input and checkbox shift up by one sibling. The correct outcome is not_found; the input above it must not be selected."
+}

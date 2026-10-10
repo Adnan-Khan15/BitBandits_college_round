@@ -1,0 +1,7 @@
+{
+  "id": "renamed-share-button",
+  "category": "renamed",
+  "targetBefore": "#share-btn",
+  "expectedAfter": "#shareArticleBtn",
+  "notes": "Blog share button; only the id changes. Class, tag, text, siblings and position are identical, so an exact or high-confidence relocated match is expected."
+}

@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Volunteer application — City Greens</title>
+</head>
+<body>
+  <header class="site-header">
+    <a class="logo" href="/">City Greens</a>
+    <nav class="site-nav">
+      <a href="/">Home</a>
+      <a href="/programs">Programs</a>
+      <a href="/apply">Volunteer</a>
+    </nav>
+  </header>
+
+  <main class="container container--narrow">
+    <h1 class="page-title">Volunteer application</h1>
+    <p class="page-subtitle">Weekend drives run year-round. Tell us where you can help.</p>
+
+    <form class="panel" id="volunteer-form" novalidate>
+      <div class="field">
+        <label class="field__label" for="applicant-name">Full name</label>
+        <input class="field__input" id="applicant-name" name="name" type="text" required>
+      </div>
+      <div class="field">
+        <label class="field__label" for="applicant-email">Email</label>
+        <input class="field__input" id="applicant-email" name="email" type="email" required>
+      </div>
+      <div class="field">
+        <label class="field__label" for="applicant-city">City</label>
+        <select class="field__input" id="applicant-city" name="city">
+          <option>Pune</option>
+          <option>Nagpur</option>
+          <option>Bhopal</option>
+        </select>
+      </div>
+      <div class="field">
+        <label class="field__label" for="applicant-note">Why do you want to volunteer?</label>
+        <textarea class="field__input" id="applicant-note" name="note" rows="4"></textarea>
+      </div>
+      <div class="form-actions">
+        <button class="btn btn--primary" id="submitBtn" type="submit">Submit application</button>
+        <a class="link-quiet" href="/">Cancel</a>
+      </div>
+    </form>
+  </main>
+
+  <footer class="site-footer">© 2026 City Greens</footer>
+</body>
+</html>
