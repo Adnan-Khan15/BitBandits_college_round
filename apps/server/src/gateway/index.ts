@@ -9,6 +9,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { AppError, beaconPayloadSchema, isAppError, LIMITS } from '@patchwork/shared';
 import type { ServiceRegistry } from '@patchwork/shared';
 import { loadEnv, type Env } from '../env.js';
+import { getActiveProjectId } from '../active.js';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../../..');
 const RUNTIME_FILE = join(repoRoot, 'packages', 'runtime', 'dist', 'patchwork-runtime.js');
@@ -68,6 +69,47 @@ export function injectRuntime(html: string, projectId: string, channel: 'live' |
   return tag + html;
 }
 
+const escapeRe = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/**
+ * Absolute links to the upstream (href/src/action) become relative, so clicks and assets stay
+ * inside the gateway instead of jumping to the real site.
+ */
+export function rewriteUpstreamUrls(html: string, origin: string): string {
+  const host = escapeRe(new URL(origin).host);
+  const re = new RegExp(`(\\b(?:href|src|action)\\s*=\\s*)(["'])(?:https?:)?//${host}(?=[/"'?#])/?`, 'gi');
+  return html.replace(re, (_m, attr: string, quote: string) => `${attr}${quote}/`);
+}
+
+/**
+ * Lets the PATCHWORK runtime run and the page render inside the Studio frame: drops frame-ancestors
+ * and adds 'self' where scripts or fetches are restricted. A policy using 'strict-dynamic' would still
+ * block a plain script tag, so it is removed instead. Returns null to remove the header.
+ */
+export function adjustCsp(csp: string): { value: string | null; how: 'adjusted' | 'removed' | 'unchanged' } {
+  const original = csp
+    .split(';')
+    .map((d) => d.trim())
+    .filter(Boolean);
+  const kept = original.filter((d) => !/^frame-ancestors\b/i.test(d));
+  if (kept.some((d) => /^script-src(-elem)?\b/i.test(d) && /'strict-dynamic'/i.test(d))) {
+    return { value: null, how: 'removed' };
+  }
+  const names = kept.map((d) => d.split(/\s+/)[0]!.toLowerCase());
+  const needsSelf = new Set(['script-src', 'script-src-elem', 'connect-src']);
+  if (!names.includes('script-src') && !names.includes('script-src-elem')) needsSelf.add('default-src');
+  let changed = kept.length !== original.length;
+  const out = kept.map((d) => {
+    const [name, ...sources] = d.split(/\s+/);
+    if (!needsSelf.has(name!.toLowerCase())) return d;
+    if (sources.includes("'self'") || sources.includes('*')) return d;
+    changed = true;
+    return [name, ...sources.filter((x) => x !== "'none'"), "'self'"].join(' ');
+  });
+  if (!changed) return { value: csp, how: 'unchanged' };
+  return out.length > 0 ? { value: out.join('; '), how: 'adjusted' } : { value: null, how: 'adjusted' };
+}
+
 /** Only origin-relative paths ("/x", not "//host/x" or "\\host"). */
 export function isSafeRelativePath(p: string): boolean {
   return p.startsWith('/') && !p.startsWith('//') && !p.includes('\\');
@@ -87,16 +129,24 @@ export function registerGatewayRoutes(
   channel: 'live' | 'preview',
   env: Env = loadEnv(),
 ): void {
-  const projectId = env.PW_PROJECT_ID;
+  // the site selected in the UI (data/active-project.json), PW_PROJECT_ID by default
+  const activeId = (): string => getActiveProjectId();
+  const activeIdDefault = env.PW_PROJECT_ID;
   const allowed = new Set(env.PW_ALLOWED_UPSTREAMS.map(normOrigin).filter((o): o is string => o !== null));
 
-  /** The project's upstream, only if it is allowlisted (PW_ALLOWED_UPSTREAMS). */
+  /**
+   * The active site's upstream. Allowed hosts: PW_ALLOWED_UPSTREAMS, or the origin of a site a release
+   * manager connected (a project row). The gateway never fetches any other host.
+   */
   const upstreamOrigin = (): string => {
-    const project = registry.core.getProject(projectId);
-    if (!project) throw new AppError('NOT_FOUND', `Gateway project ${projectId} does not exist`);
+    const project = registry.core.getProject(activeId());
+    if (!project) throw new AppError('NOT_FOUND', `The active site ${activeId()} does not exist`);
     const origin = normOrigin(project.upstreamOrigin);
-    if (!origin || !allowed.has(origin)) {
-      throw new AppError('FORBIDDEN', `Upstream ${project.upstreamOrigin} is not in PW_ALLOWED_UPSTREAMS`);
+    // The project row is the allowlist entry for a connected site (POST /api/projects validated it);
+    // seeded sites must also be in PW_ALLOWED_UPSTREAMS. No request ever picks the host.
+    const connectedSite = project.id !== activeIdDefault || allowed.has(origin ?? '');
+    if (!origin || !connectedSite) {
+      throw new AppError('FORBIDDEN', `Upstream ${project.upstreamOrigin} is not allowed`);
     }
     return origin;
   };
@@ -133,14 +183,14 @@ export function registerGatewayRoutes(
 
   app.get('/__patchwork/manifest.json', async (req, reply) => {
     reply.header('cache-control', 'no-store');
-    if (channel === 'live') return registry.releases.manifestForLive(projectId);
+    if (channel === 'live') return registry.releases.manifestForLive(activeId());
     const previewId = previewIdFrom(req);
     if (!previewId) {
       throw new AppError('NOT_FOUND', 'No preview selected (missing pw_preview cookie)');
     }
     const preview = registry.core.getPreview(previewId);
-    if (!preview || preview.projectId !== projectId) {
-      throw new AppError('NOT_FOUND', `No preview ${previewId}`);
+    if (!preview || preview.projectId !== activeId()) {
+      throw new AppError('NOT_FOUND', `No preview ${previewId} for the active site`);
     }
     return registry.core.manifestForPreview(previewId);
   });
@@ -150,7 +200,7 @@ export function registerGatewayRoutes(
       const { id } = req.params as { id: string };
       const { path } = req.query as { path?: string; editor?: string };
       const preview = registry.core.getPreview(id);
-      if (!preview || preview.projectId !== projectId || Date.parse(preview.expiresAt) <= Date.now()) {
+      if (!preview || preview.projectId !== activeId() || Date.parse(preview.expiresAt) <= Date.now()) {
         return reply
           .status(404)
           .type('text/html; charset=utf-8')
@@ -179,8 +229,8 @@ export function registerGatewayRoutes(
       if (!parsed.success) {
         throw new AppError('VALIDATION_FAILED', 'Beacon payload failed validation', parsed.error.issues);
       }
-      if (parsed.data.projectId !== projectId) {
-        throw new AppError('VALIDATION_FAILED', `Beacon for project ${parsed.data.projectId} sent to ${projectId}`);
+      if (parsed.data.projectId !== activeId()) {
+        throw new AppError('VALIDATION_FAILED', `Beacon for project ${parsed.data.projectId} sent to ${activeId()}`);
       }
       // The port decides the channel; a page cannot claim to be live from the preview port.
       registry.releases.recordBeacon({ ...parsed.data, channel });
@@ -238,6 +288,14 @@ export function registerGatewayRoutes(
     reply.status(upstream.status);
     upstream.headers.forEach((value, name) => {
       if (HOP_BY_HOP.has(name) || DROP_RESPONSE.has(name) || name === 'set-cookie') return;
+      // The developer connected this site, so it may render inside the Studio frame.
+      if (name === 'x-frame-options') return;
+      if (name === 'content-security-policy') {
+        const csp = adjustCsp(value);
+        if (csp.how !== 'unchanged') reply.header('x-patchwork-csp', csp.how);
+        if (csp.value) reply.header(name, csp.value);
+        return;
+      }
       if (name === 'location') {
         const loc = new URL(value, target);
         reply.header('location', loc.origin === origin ? `${loc.pathname}${loc.search}${loc.hash}` : value);
@@ -253,7 +311,7 @@ export function registerGatewayRoutes(
     }
     const contentType = upstream.headers.get('content-type') ?? '';
     if (contentType.toLowerCase().includes('text/html')) {
-      const html = injectRuntime(await upstream.text(), projectId, channel);
+      const html = injectRuntime(rewriteUpstreamUrls(await upstream.text(), origin), activeId(), channel);
       const buf = Buffer.from(html, 'utf8');
       return reply.header('content-length', buf.length).send(buf);
     }
