@@ -128,8 +128,17 @@ export function createDriftService(
       const release = reg.releases.get(report.releaseId);
       if (!release) throw new AppError('NOT_FOUND', `No release ${report.releaseId}`);
 
+      // A release spans several pages: use the latest report of every page checked against the
+      // same live release, so one quarantine leaves out every unsafe patch, not just this page's.
+      const latestPerPath = new Map<string, DriftReport>([[report.path, report]]);
+      for (const other of r.list(report.projectId)) {
+        if (other.releaseId !== report.releaseId || latestPerPath.has(other.path)) continue;
+        latestPerPath.set(other.path, other); // list() is newest first
+      }
+      const reports = [...latestPerPath.values()];
       const unsafe = new Set(
-        report.results
+        reports
+          .flatMap((rep) => rep.results)
           .filter((res) => res.health === 'at_risk' || res.health === 'broken')
           .map((res) => res.patchId),
       );
@@ -148,13 +157,18 @@ export function createDriftService(
         },
         actorId,
       );
-      r.setQuarantineRelease(report.id, quarantine.id);
+      for (const rep of reports) r.setQuarantineRelease(rep.id, quarantine.id);
       reg.audit.append({
         projectId: report.projectId,
         type: 'release.quarantine_proposed',
         actorId,
         subject: { type: 'release', id: quarantine.id },
-        data: { reportId: report.id, excluded: [...unsafe], kept: kept.map((p) => p.patchId) },
+        data: {
+          reportId: report.id,
+          reportIds: reports.map((rep) => rep.id),
+          excluded: [...unsafe],
+          kept: kept.map((p) => p.patchId),
+        },
       });
       return quarantine;
     },

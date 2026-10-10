@@ -110,15 +110,17 @@ export function createEditorBridge(manifest: RuntimeManifest): EditorBridge {
     if (pickActive) return;
     pickActive = true;
     ensureOverlay();
-    document.addEventListener('mousemove', onMove, true);
-    document.addEventListener('click', onClick, true);
+    // window capture runs before every document-level listener, including the capture listeners
+    // a merged setBehavior patch installs, so picking a patched element never triggers its patch.
+    window.addEventListener('mousemove', onMove, true);
+    window.addEventListener('click', onClick, true);
   };
 
   const stopPick = (): void => {
     if (!pickActive) return;
     pickActive = false;
-    document.removeEventListener('mousemove', onMove, true);
-    document.removeEventListener('click', onClick, true);
+    window.removeEventListener('mousemove', onMove, true);
+    window.removeEventListener('click', onClick, true);
     overlay.style.display = 'none';
   };
 
