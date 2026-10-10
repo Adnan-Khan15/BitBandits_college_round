@@ -1,0 +1,31 @@
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.main {
+  flex: 1;
+  min-width: 0;
+  padding: 1.5rem 2rem 3rem;
+  overflow-y: auto;
+}
+
+/* the workbench reads as an instrument, not a landing page: content is
+   left-aligned, one column, room to compare numbers column-wise */
+.main > section {
+  max-width: 68rem;
+}
+
+/* narrow screens: the rail becomes a horizontal strip above the content */
+@media (max-width: 1100px) {
+  .body {
+    flex-direction: column;
+  }
+}

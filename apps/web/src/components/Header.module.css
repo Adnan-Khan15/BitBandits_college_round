@@ -1,0 +1,60 @@
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  height: var(--header-h);
+  padding: 0 1rem 0 1.1rem;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line-strong);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+/* the mark: a patch square placed over a ruled line — the product in 12px */
+.mark {
+  width: 12px;
+  height: 12px;
+  background: var(--blueprint);
+  border-radius: 1px;
+  box-shadow: 3px 3px 0 var(--paper), 3px 3px 0 1px var(--line-strong);
+}
+
+.name {
+  font-weight: 700;
+  font-size: 0.95rem;
+  letter-spacing: 0.04em;
+}
+
+.user {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: var(--fs-s);
+}
+
+.userLabel {
+  color: var(--ink-3);
+}
+
+.select {
+  font: inherit;
+  padding: 0.2rem 0.4rem;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--paper);
+  color: var(--ink);
+}
+
+.role {
+  color: var(--ink-2);
+}
+
+.hint {
+  color: var(--ink-3);
+  font-size: var(--fs-xs);
+}

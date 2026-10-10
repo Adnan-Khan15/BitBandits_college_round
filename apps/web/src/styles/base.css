@@ -1,0 +1,181 @@
+/* PATCHWORK web app — tokens and base layer.
+   Design: cool paper + ink workbench; one blueprint accent; hairlines, no shadows.
+   System fonts only (offline demo); tabular numerals for every measured value. */
+
+:root {
+  /* palette */
+  --paper: #e9eae4;
+  --surface: #f6f6f3;
+  --surface-sunk: #e2e3dc;
+  --ink: #1b2523;
+  --ink-2: #47524e;
+  --ink-3: #6d7873;
+  --line: #c7cac1;
+  --line-strong: #a4a99f;
+  --blueprint: #1e3a5f;
+  --blueprint-soft: #dde4ee;
+  --healthy: #2f6b4f;
+  --healthy-soft: #dfe9e2;
+  --atrisk: #9a5b06;
+  --atrisk-soft: #f4e8d4;
+  --broken: #a6331d;
+  --broken-soft: #f3dfd9;
+  --neutral-soft: #e4e5de;
+
+  /* type */
+  --font: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --fs-xs: 0.75rem;
+  --fs-s: 0.8125rem;
+  --fs-m: 0.9375rem;
+  --fs-l: 1.25rem;
+  --fs-xl: 1.75rem;
+
+  /* structure */
+  --radius: 3px;
+  --rail: 13rem;
+  --header-h: 3.25rem;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font);
+  font-size: var(--fs-m);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3 {
+  margin: 0;
+  font-weight: 640;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+}
+
+h1 { font-size: var(--fs-xl); }
+h2 { font-size: var(--fs-l); }
+h3 { font-size: var(--fs-m); }
+
+p { margin: 0 0 0.75rem; }
+p:last-child { margin-bottom: 0; }
+
+a {
+  color: var(--blueprint);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+
+/* measured values are read in columns — always tabular */
+.num,
+td.num,
+th.num {
+  font-variant-numeric: tabular-nums;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--blueprint);
+  outline-offset: 1px;
+  border-radius: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* --- shared primitives ---------------------------------------------------- */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.3rem 0.7rem;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  font-size: var(--fs-s);
+  cursor: pointer;
+}
+
+.btn:hover:not(:disabled) {
+  border-color: var(--ink-3);
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.btn--primary {
+  background: var(--blueprint);
+  border-color: var(--blueprint);
+  color: #fff;
+}
+
+.btn--primary:hover:not(:disabled) {
+  border-color: var(--ink);
+}
+
+.btn--danger {
+  border-color: var(--broken);
+  color: var(--broken);
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-s);
+}
+
+.table th {
+  text-align: left;
+  font-weight: 600;
+  color: var(--ink-2);
+  padding: 0.35rem 0.6rem 0.35rem 0;
+  border-bottom: 1px solid var(--line-strong);
+  white-space: nowrap;
+}
+
+.table td {
+  padding: 0.45rem 0.6rem 0.45rem 0;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+}
+
+.table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.table--rows tbody tr:hover {
+  background: var(--surface);
+}
+
+.mono-id {
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+}
+
+.prose {
+  max-width: 80ch;
+  color: var(--ink-2);
+}

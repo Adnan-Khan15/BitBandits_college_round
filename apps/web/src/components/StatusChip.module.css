@@ -1,0 +1,37 @@
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.05rem 0.45rem 0.1rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--neutral-soft);
+  color: var(--ink);
+  font-size: var(--fs-xs);
+  white-space: nowrap;
+}
+
+.glyph {
+  font-size: 0.7rem;
+  line-height: 1;
+}
+
+.info {
+  background: var(--blueprint-soft);
+  border-color: #b9c6db;
+}
+
+.healthy {
+  background: var(--healthy-soft);
+  border-color: #b9cec1;
+}
+
+.atrisk {
+  background: var(--atrisk-soft);
+  border-color: #ddc193;
+}
+
+.broken {
+  background: var(--broken-soft);
+  border-color: #dcb1a6;
+}
