@@ -1,12 +1,13 @@
 // scripts/seed.ts (owner: Dev A)
 // Inserts the deterministic seed data (PLAN section 13.3 step 15) into the SQLite db.
 // Idempotent: INSERT OR REPLACE, so re-running is safe.
+import { fileURLToPath } from 'node:url';
 import { openDb } from '../apps/server/src/db/sqlite.js';
 import { migrate } from '../apps/server/src/db/migrate.js';
 import { loadEnvFromDisk } from '../apps/server/src/env.js';
 import { SEED_PROJECT, SEED_USERS } from '../apps/server/src/db/seed-data.js';
 
-const env = await loadEnvFromDisk(new URL('../.env', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1'));
+const env = await loadEnvFromDisk(fileURLToPath(new URL('../.env', import.meta.url)));
 const db = openDb(env.PW_DB_PATH);
 migrate(db);
 

@@ -23,7 +23,7 @@ async function main(): Promise<void> {
   const db: Db = openDb(env.PW_DB_PATH);
   migrate(db);
 
-  const registry = buildRegistry(db);
+  const registry = buildRegistry(db, env);
 
   // Control plane (:4000)
   const control = buildControlApp({ registry, db, logger: true });
@@ -39,12 +39,12 @@ async function main(): Promise<void> {
 
   // Live gateway (:4100) - only the active release, never reads the preview cookie.
   const live = Fastify({ logger: true });
-  registerGatewayRoutes(live, registry, 'live');
+  registerGatewayRoutes(live, registry, 'live', env);
   await live.listen({ port: env.PW_LIVE_PORT, host: '127.0.0.1' });
 
   // Preview gateway (:4300) - cookie-scoped preview, never falls back to live.
   const preview = Fastify({ logger: true });
-  registerGatewayRoutes(preview, registry, 'preview');
+  registerGatewayRoutes(preview, registry, 'preview', env);
   await preview.listen({ port: env.PW_PREVIEW_PORT, host: '127.0.0.1' });
 
   console.log(

@@ -1,6 +1,7 @@
 // apps/server/src/env.ts (owner: Dev A)
 // Loads .env (if present) and applies the defaults from .env.example (PLAN section 11.16).
 // Precedence: process.env > .env file > default. None is secret except OPENROUTER_API_KEY.
+import { fileURLToPath } from 'node:url';
 
 export interface Env {
   PW_CONTROL_PORT: number;
@@ -59,6 +60,10 @@ export function parseDotEnv(text: string): Record<string, string> {
       (value.startsWith("'") && value.endsWith("'") && value.length >= 2)
     ) {
       value = value.slice(1, -1);
+    } else {
+      // Unquoted values may carry an inline comment, as .env.example does: KEY=value   # note
+      const hash = value.search(/\s#/);
+      if (hash !== -1) value = value.slice(0, hash).trim();
     }
     out[key] = value;
   }
@@ -108,7 +113,7 @@ export function loadEnv(
 
 /** Read .env from disk if present (repo root), then load. Used by main.ts. */
 export async function loadEnvFromDisk(
-  envPath: string = new URL('../../.env', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1'),
+  envPath: string = fileURLToPath(new URL('../../../.env', import.meta.url)),
 ): Promise<Env> {
   let dotenv: Record<string, string> = {};
   try {

@@ -13,6 +13,7 @@ import { registerSnapshotRoutes } from './snapshots/index.js';
 import { registerVerifyRoutes } from './verify/index.js';
 import { registerReleaseRoutes } from './releases/index.js';
 import { registerDriftRoutes } from './drift/index.js';
+import { registerCoreRoutes } from './core/routes.js';
 
 export interface AppOptions {
   registry: ServiceRegistry;
@@ -41,8 +42,6 @@ export const STUB_ROUTES: Array<Pick<RouteOptions, 'method' | 'url'> & { phase: 
   { method: 'POST', url: '/api/projects/:pid/conflicts', phase: 'Phase 2 step 13' },
   { method: 'POST', url: '/api/projects/:pid/previews', phase: 'Phase 2 step 14' },
   { method: 'PUT', url: '/api/previews/:id', phase: 'Phase 2 step 14' },
-  { method: 'GET', url: '/api/projects/:pid/audit', phase: 'Phase 2 step 15' },
-  { method: 'GET', url: '/api/projects/:pid/audit/verify', phase: 'Phase 2 step 11' },
 ];
 
 export function buildControlApp(opts: AppOptions): FastifyInstance {
@@ -159,6 +158,9 @@ export function buildControlApp(opts: AppOptions): FastifyInstance {
       },
     });
   }
+
+  // --- A-owned real routes (core/routes.ts) ---------------------------------
+  registerCoreRoutes(app, registry);
 
   // --- B's and C's route plugins --------------------------------------------
   registerSnapshotRoutes(app, registry);
