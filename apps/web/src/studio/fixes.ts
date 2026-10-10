@@ -158,7 +158,7 @@ export function titleFor(form: FixForm, picked: Picked | null): string {
 }
 
 export function stepText(step: VerificationStep): string {
-  const target = (t: string) => (t === 'anchor:a1' ? 'the picked element' : t === 'anchor:a2' ? 'the second element' : t);
+  const target = (t: string) => (t === 'anchor:a1' ? 'the picked element' : t.startsWith('anchor:') ? 'the changed element' : t);
   switch (step.action) {
     case 'goto':
       return `Open ${step.path}`;

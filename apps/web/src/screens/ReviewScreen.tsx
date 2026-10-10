@@ -26,7 +26,8 @@ const pageName = (path: string): string => (path === '/' ? 'the home page' : `th
 /** "Adnan's “Fix price typo” also changes the text of “₹12,99”: theirs ₹1,299, this fix ₹1,199." */
 function conflictSentence(c: Conflict, all: Patch[], users: User[], candidate: Patch): string {
   const other = c.patchIds[1] ? all.find((p) => p.id === c.patchIds[1]) : null;
-  const elementName = anchorLabel(candidate.anchors, Object.keys(candidate.anchors)[0] ?? 'a1');
+  const keys = Object.keys(candidate.anchors);
+  const elementName = keys.length === 1 ? anchorLabel(candidate.anchors, keys[0]!) : 'one of the same elements';
   if (!other) {
     if (c.type === 'UNRESOLVED_TARGET') return "This fix's element can't be found on the current page any more.";
     if (c.type === 'AMBIGUOUS_TARGET') return "This fix's element matches more than one thing on the page.";

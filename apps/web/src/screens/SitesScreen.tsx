@@ -55,6 +55,24 @@ export function SitesScreen() {
     }
   };
 
+  const SAMPLE = { name: 'Chai & Code Café', upstreamOrigin: 'http://localhost:5500', paths: ['/', '/menu', '/book'] };
+  const sampleConnected = data.sites.find((s) => s.upstreamOrigin === SAMPLE.upstreamOrigin) ?? null;
+
+  const connectSample = async () => {
+    setBusy('sample');
+    setError(null);
+    setConnected(null);
+    try {
+      const site = rm ? await actAs(rm.id, () => api.connectSite(SAMPLE)) : await api.connectSite(SAMPLE);
+      setConnected(site.name);
+      reload();
+    } catch (err) {
+      setError(err);
+    } finally {
+      setBusy(null);
+    }
+  };
+
   const connect = async () => {
     setBusy('connect');
     setError(null);
@@ -126,6 +144,22 @@ export function SitesScreen() {
         </ul>
       )}
 
+      {!sampleConnected ? (
+        <div className={styles.sample}>
+          <div>
+            <h2>Try it on a second website</h2>
+            <p className={styles.small}>
+              Chai &amp; Code Café runs on its own server at localhost:5500, started by the patchwork command. PATCHWORK has
+              never seen it. It has real problems to fix: a “Book a table” button that leads nowhere, an expired
+              announcement, a wrong phone number. Like many real sites it refuses to be embedded; PATCHWORK adapts.
+            </p>
+          </div>
+          <button type="button" className="btn btn--primary" disabled={busy !== null} onClick={() => void connectSample()}>
+            {busy === 'sample' ? 'Connecting…' : `Connect the sample site as ${rm?.name ?? 'release manager'}`}
+          </button>
+        </div>
+      ) : null}
+
       <form
         className={styles.connect}
         onSubmit={(e) => {
@@ -134,7 +168,10 @@ export function SitesScreen() {
         }}
       >
         <h2>Connect a site</h2>
-        <p className={styles.small}>Only connect sites your team owns or runs.</p>
+        <p className={styles.small}>
+          Any site your team owns or runs: a dev server such as http://localhost:3000, a static build served locally, or an
+          https:// address. Only connect sites you own.
+        </p>
         <div className={styles.fields}>
           <label>
             Name

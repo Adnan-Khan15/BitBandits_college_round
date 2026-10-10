@@ -40,6 +40,53 @@ interface SiteState {
 
 const cap = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
 
+/** Studio work in progress survives leaving the page and reloading it (per site, this browser tab). */
+interface StudioMemory {
+  previewId?: string;
+  aiPatch?: Patch | null;
+  sentPatch?: Patch | null;
+  instruction?: string;
+  aiLog?: Array<{ text: string; state: 'running' | 'done' | 'failed' }>;
+  aiChanges?: Array<{ element: string; change: string }>;
+  aiNotes?: string[];
+}
+const memKey = (pid: string) => `patchwork.studio.${pid}`;
+function readMemory(pid: string): StudioMemory {
+  try {
+    return JSON.parse(window.sessionStorage.getItem(memKey(pid)) ?? '{}') as StudioMemory;
+  } catch {
+    return {};
+  }
+}
+function writeMemory(pid: string, m: StudioMemory): void {
+  try {
+    window.sessionStorage.setItem(memKey(pid), JSON.stringify(m));
+  } catch {
+    /* storage unavailable: the Studio still works, it just forgets on reload */
+  }
+}
+
+/** Where a fix is on its way to the live site, and the next step, in plain words. */
+function WhereIsIt({ status, live, tested }: { status: Patch['status'] | null; live: boolean; tested: boolean }) {
+  let text: string;
+  let link: { href: string; label: string } | null = null;
+  if (live) text = 'This fix is live: customers see it on the live site (localhost:4100).';
+  else if (status === 'merged') {
+    text = 'Approved and merged. It reaches the live site when a release with it is deployed.';
+    link = { href: '#/ship', label: 'Ship it' };
+  } else if (status === 'in_review' || status === 'approved' || status === 'changes_requested') {
+    text = 'Waiting in Review. After a reviewer approves and merges it, the release manager ships it on Ship.';
+    link = { href: '#/review', label: 'Open Review' };
+  } else {
+    text = `${tested ? 'Tested in the Preview only. ' : ''}Not on the live site yet: send it for review, a teammate approves and merges it, then it is shipped on Ship.`;
+  }
+  return (
+    <div className={styles.where} role="status">
+      <strong>Where is this change?</strong> {text} {link ? <a href={link.href}>{link.label}</a> : null}
+    </div>
+  );
+}
+
 export function StudioScreen() {
   const team = useTeam();
   const userId = useCurrentUserId();
@@ -115,6 +162,8 @@ export function StudioScreen() {
   const [instruction, setInstruction] = useState('');
   const [aiPatch, setAiPatch] = useState<Patch | null>(null);
   const [aiMeta, setAiMeta] = useState<{ model: string; element: string } | null>(null);
+  const [aiChanges, setAiChanges] = useState<Array<{ element: string; change: string }>>([]);
+  const [aiNotes, setAiNotes] = useState<string[]>([]);
   const [aiLog, setAiLog] = useState<Array<{ text: string; state: 'running' | 'done' | 'failed' }>>([]);
   const [aiError, setAiError] = useState<unknown>(null);
   const [elapsed, setElapsed] = useState(0);
@@ -132,6 +181,40 @@ export function StudioScreen() {
 
   /* --- preview: one preview per Studio session; the draft rides on it ---------------------- */
   const [preview, setPreview] = useState<{ id: string } | null>(null);
+
+  // restore work in progress once the site and its fixes are known; drop anything that no longer exists
+  const restored = useRef(false);
+  useEffect(() => {
+    if (restored.current || !project || !site) return;
+    restored.current = true;
+    const m = readMemory(project.id);
+    const exists = (p?: Patch | null) => (p ? (site.patches.find((x) => x.id === p.id) ?? null) : null);
+    if (m.previewId) setPreview({ id: m.previewId });
+    const ai = exists(m.aiPatch);
+    if (ai) {
+      aiPatchRef.current = ai;
+      setAiPatch(ai);
+      setAiLog(m.aiLog ?? []);
+      setAiChanges(m.aiChanges ?? []);
+      setAiNotes(m.aiNotes ?? []);
+      setInstruction(m.instruction ?? '');
+    }
+    const sent = exists(m.sentPatch);
+    if (sent) setSentPatch(sent);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [project?.id, site]);
+  useEffect(() => {
+    if (!project || !restored.current) return;
+    writeMemory(project.id, {
+      previewId: preview?.id,
+      aiPatch,
+      sentPatch,
+      instruction,
+      aiLog: aiLog.filter((l) => l.state !== 'running'),
+      aiChanges,
+      aiNotes,
+    });
+  }, [project, preview, aiPatch, sentPatch, instruction, aiLog, aiChanges, aiNotes]);
   const spec: PreviewSpec | null = useMemo(() => {
     if (aiPatch) return { base: 'live', include: [aiPatch.id], exclude: [], draft: null, resolverMode: 'smart' };
     if (viewFixId && !picked) return { base: 'live', include: [viewFixId], exclude: [], draft: null, resolverMode: 'smart' };
@@ -172,7 +255,9 @@ export function StudioScreen() {
         lastSpec.current = specJson;
         setError(null);
       } catch (err) {
-        setError(err);
+        // a preview from an earlier session (expired, or the data was reset): open a fresh one
+        if (isApiClientError(err) && err.code === 'NOT_FOUND' && preview) setPreview(null);
+        else setError(err);
       }
     }, 350);
     return () => window.clearTimeout(handle);
@@ -234,6 +319,8 @@ export function StudioScreen() {
   const reset = () => {
     setAiPatch(null);
     setAiMeta(null);
+    setAiChanges([]);
+    setAiNotes([]);
     setAiLog([]);
     setAiError(null);
     setPicked(null);
@@ -288,9 +375,11 @@ export function StudioScreen() {
       if (r.newConsoleErrors.length) {
         // a page error after the click means the site's own handler still ran: the click was not replaced
         const ranOwn = r.steps.some((s) => s.step.action === 'click' && s.ok);
+        const err = r.newConsoleErrors[0] ?? '';
+        if (/404|not found/i.test(err)) return `a new error appeared after the change: something the page asked for does not exist (${err})`;
         return ranOwn
-          ? `after the click the site's own broken click handler still ran (${r.newConsoleErrors[0]}), so the fix did not replace what the click does`
-          : `new page error: ${r.newConsoleErrors[0]}`;
+          ? `after the click a new error appeared in the page (${err}): the site's own click handler may still be running`
+          : `a new error appeared in the page: ${err}`;
       }
       return r.summary;
     };
@@ -299,8 +388,10 @@ export function StudioScreen() {
       const d = await api.assistDraft(project.id, { path, instruction: instruction.trim(), pickedElementPath: picked?.elementPath ?? null });
       aiPatchRef.current = d.patch;
       setAiPatch(d.patch);
-      setAiMeta({ model: d.model, element: d.element.text ? `“${d.element.text}”` : `the ${d.element.tag}` });
-      finish('done', `Drafted “${d.summary}” on ${d.element.text ? `“${d.element.text}”` : d.element.tag} (${d.model}, ${(d.latencyMs / 1000).toFixed(1)} s)`);
+      setAiMeta({ model: d.model, element: 'the element' });
+      setAiChanges(d.changes);
+      setAiNotes(d.notes);
+      finish('done', `Drafted “${d.summary}”: ${d.changes.length} change${d.changes.length === 1 ? '' : 's'} (${d.model}, ${(d.latencyMs / 1000).toFixed(1)} s)`);
       await showInPreview(d.patch.id);
       for (let attempt = 1; attempt <= 2; attempt++) {
         push('Testing in a real browser…');
@@ -310,6 +401,16 @@ export function StudioScreen() {
           break;
         }
         const why = failureOf(r);
+        const mineId = aiPatchRef.current?.id;
+        const ownFailed =
+          r.steps.some((s) => !s.ok && s.patchId === mineId) ||
+          r.patchApplication.some((p) => p.patchId === mineId && !p.applied && p.reason !== 'path_mismatch') ||
+          r.status === 'error';
+        if (!ownFailed && r.newConsoleErrors.length === 0) {
+          // the AI's own changes passed; what failed belongs to another fix, so revising cannot help
+          finish('failed', `Your changes pass, but another live fix's check failed: ${why}. A reviewer decides in Review.`);
+          break;
+        }
         finish('failed', `Failed: ${why}`);
         if (attempt === 2) {
           push('Two attempts used. Over to you: fix it manually or send it as is for review.', 'failed');
@@ -319,7 +420,9 @@ export function StudioScreen() {
         const rv = await api.assistRevise(aiPatchRef.current!.id, { instruction: instruction.trim(), failure: why });
         aiPatchRef.current = rv.patch;
         setAiPatch(rv.patch);
-        setAiMeta({ model: rv.model, element: rv.element.text ? `“${rv.element.text}”` : `the ${rv.element.tag}` });
+        setAiMeta({ model: rv.model, element: 'the element' });
+        setAiChanges(rv.changes);
+        setAiNotes(rv.notes);
         finish('done', `Revised: “${rv.summary}” (${(rv.latencyMs / 1000).toFixed(1)} s)`);
         await showInPreview(rv.patch.id);
       }
@@ -441,8 +544,8 @@ export function StudioScreen() {
     preview: viewedFix && !picked
       ? `The live site plus “${viewedFix.title}”, the fix under review. Customers don't see it yet.`
       : picked ? 'Your fix, not shipped yet. Only you see this.' : 'The live site plus your unshipped fix. Only you see this.',
-    live: `What customers see right now: ${liveRelease ? `release R${liveRelease.number}` : 'no release yet, the original site'}.`,
-    original: `${project?.name ?? 'The site'}'s own server, ${project?.upstreamOrigin ?? ''}. Its code is never changed.`,
+    live: `What customers see at ${LIVE_ORIGIN}: ${liveRelease ? `release R${liveRelease.number}` : 'no release yet, the original site'}. A fix appears here only after Review and Ship.`,
+    original: `${project?.name ?? 'The site'}'s own server, ${project?.upstreamOrigin ?? ''}. It never changes: PATCHWORK leaves its code alone.`,
   };
 
   return (
@@ -590,15 +693,27 @@ export function StudioScreen() {
               <>
                 <h2>{aiPatch.title}</h2>
                 <ul className={styles.checks}>
-                  {aiPatch.ops.map((op, i) => (
-                    <li key={i}>{describePatchOp(op, aiPatch.anchors)}</li>
-                  ))}
-                  {aiPatch.checks.map((c, i) => (
-                    <li key={`c${i}`} className="muted">
-                      Browser check: {cap(stepText(c).replace('the picked element', aiMeta?.element ?? 'the element'))}
-                    </li>
+                  {(aiChanges.length > 0
+                    ? aiChanges.map((c) => `${c.element}: ${c.change}`)
+                    : aiPatch.ops.map((op) => describePatchOp(op, aiPatch.anchors))
+                  ).map((line, i) => (
+                    <li key={i}>{line}</li>
                   ))}
                 </ul>
+                <p className="muted">
+                  A real browser checks {aiPatch.checks.length} thing{aiPatch.checks.length === 1 ? '' : 's'} on the page:{' '}
+                  {aiPatch.checks.map((c) => stepText(c).replace(/anchor:a\d+/g, 'the element')).join('; ')}.
+                </p>
+                {aiNotes.map((n, i) => (
+                  <p key={i} className={styles.note}>
+                    {n}
+                  </p>
+                ))}
+                <WhereIsIt
+                  status={(site?.patches ?? []).find((p) => p.id === aiPatch.id)?.status ?? aiPatch.status}
+                  live={liveIds.has(aiPatch.id)}
+                  tested={aiLog.some((l) => l.text.startsWith('Passed'))}
+                />
               </>
             ) : null}
             {aiError ? <PlainError error={aiError} /> : null}
@@ -626,7 +741,55 @@ export function StudioScreen() {
           </div>
         ) : null}
 
-        {step === 1 && aiLog.length === 0 && !aiPatch && !aiError ? (
+        {viewedFix && !picked && aiLog.length === 0 && !aiPatch && !aiError ? (
+          <div className={styles.stepBody}>
+            <div className={styles.pickedChip}>
+              <span>Showing in the Preview</span>
+              <a className={styles.linkBtn} href="#/studio">
+                Close
+              </a>
+            </div>
+            <h2>{viewedFix.title}</h2>
+            <div>
+              {liveIds.has(viewedFix.id) ? <Chip tone="healthy" glyph="●">live</Chip> : <PatchStatusChip status={viewedFix.status} />}{' '}
+              <span className="muted">by {nameOf(team, viewedFix.authorId)} on {viewedFix.urlPath}</span>
+            </div>
+            <ul className={styles.checks}>
+              {viewedFix.ops.map((op, i) => (
+                <li key={i}>{describePatchOp(op, viewedFix.anchors)}</li>
+              ))}
+            </ul>
+            <WhereIsIt status={viewedFix.status} live={liveIds.has(viewedFix.id)} tested={false} />
+            {error ? <PlainError error={error} /> : null}
+            {viewedFix.status === 'draft' || viewedFix.status === 'changes_requested' ? (
+              <div className={styles.footer}>
+                <span className="muted">
+                  {viewedFix.authorId === userId ? 'Your draft.' : `${nameOf(team, viewedFix.authorId)}'s draft.`}
+                </span>
+                <button
+                  type="button"
+                  className="btn btn--patch"
+                  disabled={busy !== null}
+                  onClick={async () => {
+                    setBusy('send');
+                    setError(null);
+                    try {
+                      await api.submitPatch(viewedFix.id);
+                    } catch (err) {
+                      setError(err);
+                    } finally {
+                      setBusy(null);
+                    }
+                  }}
+                >
+                  {busy === 'send' ? 'Sending…' : 'Send for review'}
+                </button>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+
+        {step === 1 && aiLog.length === 0 && !aiPatch && !aiError && !viewedFix ? (
           <div className={styles.stepBody}>
             <h2>Pick what is broken</h2>
             <p className={styles.lede}>
@@ -734,6 +897,13 @@ export function StudioScreen() {
               {busy === 'test' ? 'Testing in a real browser…' : 'Test it now'}
             </button>
             {run ? <RunResult run={run} /> : null}
+            {run || sentPatch ? (
+              <WhereIsIt
+                status={sentPatch ? ((site?.patches ?? []).find((p) => p.id === sentPatch.id)?.status ?? sentPatch.status) : null}
+                live={sentPatch ? liveIds.has(sentPatch.id) : false}
+                tested={run?.status === 'passed'}
+              />
+            ) : null}
 
             {error ? <PlainError error={error} /> : null}
             <div className={styles.footer}>
@@ -765,7 +935,9 @@ export function StudioScreen() {
             <ul>
               {myFixes.slice(0, 6).map((p) => (
                 <li key={p.id}>
-                  <span className={styles.fixTitle}>{p.title}</span>
+                  <a className={styles.fixTitle} href={`#/studio/fix/${p.id}`} title="Show this fix in the Preview">
+                    {p.title}
+                  </a>
                   {liveIds.has(p.id) ? (
                     <Chip tone="healthy" glyph="●">live</Chip>
                   ) : (

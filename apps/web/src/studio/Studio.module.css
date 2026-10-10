@@ -550,3 +550,25 @@
 .ai_running span:first-child {
   color: var(--blueprint);
 }
+
+.where {
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--blueprint);
+  border-radius: 4px;
+  background: var(--blueprint-soft);
+  font-size: var(--fs-s);
+}
+
+.note {
+  margin: 0;
+  padding: 0.5rem 0.7rem;
+  border-left: 3px solid var(--atrisk);
+  background: var(--atrisk-soft);
+  border-radius: 3px;
+  font-size: var(--fs-s);
+}
+
+a.fixTitle {
+  color: var(--ink);
+}

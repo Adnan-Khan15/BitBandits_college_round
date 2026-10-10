@@ -97,3 +97,26 @@
   font-size: var(--fs-s);
   font-weight: 560;
 }
+
+.sample {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+  padding: 1rem 1.1rem;
+  border: 1px solid var(--patch-line);
+  border-left: 3px solid var(--patch);
+  border-radius: 4px;
+  background: var(--patch-soft);
+}
+
+.sample h2 {
+  font-size: var(--fs-l);
+  margin-bottom: 0.3rem;
+}
+
+.sample .small {
+  max-width: 62ch;
+}
