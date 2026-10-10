@@ -65,7 +65,7 @@ describe('scaffold', () => {
     await app.close();
   });
 
-  it('answers unknown routes with 404 in the ApiError shape (B's and C's routes are theirs to register)', async () => {
+  it('answers unknown routes with 404 in the ApiError shape (B- and C-owned routes are theirs to register)', async () => {
     const app = buildControlApp({ registry: buildRegistry(db), db });
     const res = await app.inject({ method: 'GET', url: '/api/no-such-route' });
     expect(res.statusCode).toBe(404);
@@ -106,7 +106,9 @@ describe('scaffold', () => {
     const app = buildControlApp({ registry, db });
     app.get('/api/projects/:pid/releases', async () => ({ items: [] }));
     app.post('/api/projects/:pid/snapshots', async () => ({ id: 'snp_1' }));
-    await expect(app.ready()).resolves.toBeUndefined();
+    await app.ready(); // must not throw FST_ERR_DUPLICATED_ROUTES
+    const res = await app.inject({ method: 'GET', url: '/api/no-such-route' });
+    expect(res.statusCode).toBe(404);
     await app.close();
   });
 });
