@@ -3,12 +3,13 @@
 import type { FastifyInstance } from 'fastify';
 import type { ServiceRegistry, SnapshotService } from '@patchwork/shared';
 import { AppError } from '@patchwork/shared';
+import type { Db } from '../db/sqlite.js';
 
 const notImplemented = (fn: string): never => {
   throw new AppError('NOT_IMPLEMENTED', `snapshots.${fn} is a scaffold stub (owner: Dev C)`);
 };
 
-export function createSnapshotService(): SnapshotService {
+export function createSnapshotService(_db: Db): SnapshotService {
   return {
     capture: () => notImplemented('capture'),
     latest: () => notImplemented('latest'),

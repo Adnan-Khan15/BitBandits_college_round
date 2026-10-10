@@ -3,12 +3,13 @@
 import type { FastifyInstance } from 'fastify';
 import type { ServiceRegistry, VerificationRun, VerifyService } from '@patchwork/shared';
 import { AppError } from '@patchwork/shared';
+import type { Db } from '../db/sqlite.js';
 
 const notImplemented = (fn: string): never => {
   throw new AppError('NOT_IMPLEMENTED', `verify.${fn} is a scaffold stub (owner: Dev C)`);
 };
 
-export function createVerifyService(): VerifyService {
+export function createVerifyService(_db: Db, _registry: ServiceRegistry): VerifyService {
   return {
     start: () => notImplemented('start'),
     runToCompletion: () => notImplemented('runToCompletion'),
