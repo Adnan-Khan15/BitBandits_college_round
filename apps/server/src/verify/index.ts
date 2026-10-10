@@ -263,6 +263,7 @@ export function createVerifyService(db: Db, registry: ServiceRegistry, env: Env 
     origin: string,
     path: string,
     patch: FrozenPatch,
+    later: FrozenPatch[],
   ): Promise<StepResult[]> => {
     const results: StepResult[] = [];
     const page = await context.newPage();
@@ -277,8 +278,31 @@ export function createVerifyService(db: Db, registry: ServiceRegistry, env: Env 
         if (!res?.elementPath) throw new Error(`anchor "${key}" did not resolve on ${path}`);
         return res.elementPath;
       };
+      /** The later fix that changes the same property of this check's element, if any. */
+      const supersededBy = (step: VerificationStep): FrozenPatch | null => {
+        const prop = step.action === 'expectText' ? 'text' : step.action === 'expectHidden' || step.action === 'expectVisible' ? 'visibility' : null;
+        if (!prop || !('target' in step) || !step.target.startsWith('anchor:')) return null;
+        const mine = status?.resolutions.find((r) => r.anchorId === step.target.slice('anchor:'.length))?.elementPath;
+        if (!mine) return null;
+        for (const l of later) {
+          const ls = statuses.find((s) => s.patchId === l.patchId);
+          if (!ls?.applied) continue;
+          const hits = l.ops.some((op) => {
+            const opProp = op.kind === 'setText' ? 'text' : op.kind === 'hide' || op.kind === 'show' ? 'visibility' : null;
+            return opProp === prop && ls.resolutions.find((r) => r.anchorId === op.target.anchor)?.elementPath === mine;
+          });
+          if (hits) return l;
+        }
+        return null;
+      };
       for (const [index, step] of patch.checks.entries()) {
         const started = Date.now();
+        const newer = supersededBy(step);
+        if (newer) {
+          // that fix was overridden on purpose (merge: "keep this fix"): its old expectation no longer applies
+          results.push({ patchId: patch.patchId, index, step, ok: true, error: `superseded by the later fix “${newer.title}”`, screenshot: null, durationMs: 0 });
+          continue;
+        }
         let error: string | null = null;
         try {
           await runStep(page, origin, step, target);
@@ -449,11 +473,11 @@ export function createVerifyService(db: Db, registry: ServiceRegistry, env: Env 
       }
 
       const steps: StepResult[] = [];
-      for (const patch of patches) {
+      for (const [i, patch] of patches.entries()) {
         if (patch.checks.length === 0) continue;
         const path = paths.find((p) => pathMatches(patch.urlPath, p));
         if (!path) continue;
-        steps.push(...(await runChecks(run.id, candidate.context, candidateOrigin, path, patch)));
+        steps.push(...(await runChecks(run.id, candidate.context, candidateOrigin, path, patch, patches.slice(i + 1))));
       }
 
       const baselineErrors = new Set(baseline.errors);

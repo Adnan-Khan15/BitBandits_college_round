@@ -4,6 +4,7 @@
 // The resolver treats a missing rect as "feature absent", so conflicts and drift still work.
 import { createHash } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
+import { chromium, type Browser } from 'playwright';
 import { nanoid } from 'nanoid';
 import { AppError, snapshotRequestSchema } from '@patchwork/shared';
 import type { Rect, ServiceRegistry, Snapshot, SnapshotService } from '@patchwork/shared';
@@ -31,6 +32,42 @@ function rowToSnapshot(r: SnapshotRow): Snapshot {
   };
 }
 
+/**
+ * A page built by JavaScript (React, Vue, a Vite or Next dev server...) arrives as an almost empty
+ * shell plus scripts. Those pages are rendered in headless Chromium so the AI, the conflict check
+ * and Drift Sentinel see the same elements a visitor does. Server-rendered pages skip the browser.
+ */
+export function needsRendering(html: string): boolean {
+  if (!/<script\b/i.test(html)) return false;
+  const body = /<body[^>]*>([\s\S]*)<\/body>/i.exec(html)?.[1] ?? html;
+  const visible = body
+    .replace(/<(script|style|noscript|template)\b[\s\S]*?<\/\1>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return visible.length < 200;
+}
+
+let browserPromise: Promise<Browser> | null = null;
+
+async function renderInBrowser(url: string): Promise<string | null> {
+  try {
+    browserPromise ??= chromium.launch();
+    const browser = await browserPromise;
+    const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+    try {
+      const page = await context.newPage();
+      await page.goto(url, { waitUntil: 'networkidle', timeout: 15_000 });
+      return await page.content();
+    } finally {
+      await context.close();
+    }
+  } catch {
+    browserPromise = null;
+    return null; // keep the fetched HTML: an unrendered snapshot is still better than none
+  }
+}
+
 export const domHashOf = (html: string): string =>
   createHash('sha256').update(html.replace(/\s+/g, ' ').trim()).digest('hex');
 
@@ -54,6 +91,7 @@ export function createSnapshotService(db: Db): SnapshotService {
         if (err instanceof AppError) throw err;
         throw new AppError('UPSTREAM_UNREACHABLE', `Upstream ${project.upstream_origin} is unreachable`);
       }
+      if (needsRendering(html)) html = (await renderInBrowser(url.href)) ?? html;
       const snapshot: Snapshot = {
         id: `snp_${nanoid(12)}`,
         projectId,
