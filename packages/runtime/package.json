@@ -1,0 +1,17 @@
+{
+  "name": "@patchwork/runtime",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "node build.mjs"
+  },
+  "dependencies": {
+    "@patchwork/engine": "0.1.0",
+    "@patchwork/shared": "0.1.0"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2"
+  }
+}
