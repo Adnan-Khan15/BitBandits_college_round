@@ -9,6 +9,7 @@ import { ZodError } from 'zod';
 import { AppError, isAppError, USER_HEADER } from '@patchwork/shared';
 import type { ServiceRegistry } from '@patchwork/shared';
 import type { Db } from './db/sqlite.js';
+import { registerCoreRoutes } from './core/routes.js';
 import { registerSnapshotRoutes } from './snapshots/index.js';
 import { registerVerifyRoutes } from './verify/index.js';
 import { registerReleaseRoutes } from './releases/index.js';
@@ -20,29 +21,19 @@ export interface AppOptions {
   logger?: boolean;
 }
 
-/** Every A-owned control route that is still a stub until Phase 2 (steps 10-15).
+/** A-owned control routes that are still 501 stubs until Phase 2 (steps 13-14).
  *
- * Ownership rule (fixes the duplicate-route boot failure on integration): Dev A
- * registers ONLY A-owned routes here. Dev B and Dev C register their own routes -
- * including their own 501 stubs if they want them - inside their own register*
- * functions (drift/index.ts, snapshots/, verify/, releases/, gateway/). If Dev A
- * pre-registers another dev's routes here, Fastify throws FST_ERR_DUPLICATED_ROUTES
- * at boot the moment the owner lands the real route. Unregistered routes answer with
- * the 404 ApiError response from setNotFoundHandler below. */
+ * Ownership rule: Dev A registers ONLY A-owned routes here (the rest live in
+ * core/routes.ts). Dev B and Dev C register their own routes inside their own
+ * register* functions. If Dev A pre-registers another dev's routes, Fastify throws
+ * FST_ERR_DUPLICATED_ROUTES at boot the moment the owner lands the real route.
+ * Unregistered routes answer with the 404 ApiError response from
+ * setNotFoundHandler below. */
 export const STUB_ROUTES: Array<Pick<RouteOptions, 'method' | 'url'> & { phase: string }> = [
-  { method: 'GET', url: '/api/projects/:pid/patches', phase: 'Phase 2 step 12' },
-  { method: 'POST', url: '/api/projects/:pid/patches', phase: 'Phase 2 step 12' },
-  { method: 'GET', url: '/api/patches/:id', phase: 'Phase 2 step 12' },
-  { method: 'PUT', url: '/api/patches/:id', phase: 'Phase 2 step 12' },
-  { method: 'POST', url: '/api/patches/:id/validate', phase: 'Phase 2 step 10' },
-  { method: 'POST', url: '/api/patches/:id/submit', phase: 'Phase 2 step 12' },
-  { method: 'POST', url: '/api/patches/:id/reviews', phase: 'Phase 2 step 12' },
   { method: 'POST', url: '/api/patches/:id/merge', phase: 'Phase 2 step 13' },
   { method: 'POST', url: '/api/projects/:pid/conflicts', phase: 'Phase 2 step 13' },
   { method: 'POST', url: '/api/projects/:pid/previews', phase: 'Phase 2 step 14' },
   { method: 'PUT', url: '/api/previews/:id', phase: 'Phase 2 step 14' },
-  { method: 'GET', url: '/api/projects/:pid/audit', phase: 'Phase 2 step 15' },
-  { method: 'GET', url: '/api/projects/:pid/audit/verify', phase: 'Phase 2 step 11' },
 ];
 
 export function buildControlApp(opts: AppOptions): FastifyInstance {
@@ -86,65 +77,8 @@ export function buildControlApp(opts: AppOptions): FastifyInstance {
     }
   });
 
-  // --- A-owned routes that already work at scaffold -------------------------
-  app.get('/api/users', async () => {
-    const rows = db.prepare('SELECT id, name, role FROM users ORDER BY id').all() as Array<{
-      id: string;
-      name: string;
-      role: string;
-    }>;
-    return { items: rows };
-  });
-
-  app.get('/api/projects', async () => {
-    const rows = db
-      .prepare('SELECT id, name, upstream_origin, paths_json, live_release_id, created_at FROM projects ORDER BY id')
-      .all() as Array<{
-      id: string;
-      name: string;
-      upstream_origin: string;
-      paths_json: string;
-      live_release_id: string | null;
-      created_at: string;
-    }>;
-    return {
-      items: rows.map((r) => ({
-        id: r.id,
-        name: r.name,
-        upstreamOrigin: r.upstream_origin,
-        paths: JSON.parse(r.paths_json) as string[],
-        liveReleaseId: r.live_release_id,
-        createdAt: r.created_at,
-      })),
-    };
-  });
-
-  app.get('/api/projects/:pid', async (req) => {
-    const { pid } = req.params as { pid: string };
-    const r = db
-      .prepare(
-        'SELECT id, name, upstream_origin, paths_json, live_release_id, created_at FROM projects WHERE id = ?',
-      )
-      .get(pid) as
-      | {
-          id: string;
-          name: string;
-          upstream_origin: string;
-          paths_json: string;
-          live_release_id: string | null;
-          created_at: string;
-        }
-      | undefined;
-    if (!r) throw new AppError('NOT_FOUND', `No project ${pid}`);
-    return {
-      id: r.id,
-      name: r.name,
-      upstreamOrigin: r.upstream_origin,
-      paths: JSON.parse(r.paths_json) as string[],
-      liveReleaseId: r.live_release_id,
-      createdAt: r.created_at,
-    };
-  });
+  // --- A-owned routes (users, projects, patches, validate, submit, reviews, audit) --
+  registerCoreRoutes(app, { registry, db });
 
   // --- stub routes (501, ApiError shape); A-owned only (see STUB_ROUTES comment) --
   for (const route of STUB_ROUTES) {
