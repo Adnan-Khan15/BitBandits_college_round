@@ -71,6 +71,16 @@ Open `http://localhost:4000`, pick a user (identity is a picker, not auth), and:
 
 ## Run the demo
 
+One command does everything below (fresh data, build, all services, demo seed) and opens the UI:
+
+```bash
+./demo.sh            # start; Ctrl+C stops everything
+./demo.sh --keep     # start again without resetting the data
+./demo.sh stop       # stop everything from another terminal
+```
+
+Logs go to `data/logs/`. The same steps by hand:
+
 ```bash
 npm ci && npx playwright install chromium && cp .env.example .env
 npm run reset && npm run build          # fresh database, runtime bundle, web app, typecheck
