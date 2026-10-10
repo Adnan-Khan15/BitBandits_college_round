@@ -13,7 +13,7 @@ import { Chip, PatchStatusChip } from '../components/StatusChip.js';
 import { useCurrentUserId } from '../user.js';
 import { useRoute } from '../router.js';
 import { nameOf, useTeam } from '../team.js';
-import { firstProject } from '../screens/shared.js';
+import { describePatchOp, firstProject } from '../screens/shared.js';
 import {
   ATTR_CHOICES,
   emptyForm,
@@ -111,6 +111,14 @@ export function StudioScreen() {
   const [error, setError] = useState<unknown>(null);
   const [run, setRun] = useState<VerificationRun | null>(null);
 
+  /* --- Ask PATCHWORK: AI drafts and tests; people ship ---------------------------------- */
+  const [instruction, setInstruction] = useState('');
+  const [aiPatch, setAiPatch] = useState<Patch | null>(null);
+  const [aiMeta, setAiMeta] = useState<{ model: string; element: string } | null>(null);
+  const [aiLog, setAiLog] = useState<Array<{ text: string; state: 'running' | 'done' | 'failed' }>>([]);
+  const [aiError, setAiError] = useState<unknown>(null);
+  const [elapsed, setElapsed] = useState(0);
+
   const ops = opsFor(form);
   const checks = suggestedChecks(form).filter((_, i) => !removedChecks.includes(i));
   const autoTitle = titleFor(form, picked);
@@ -125,6 +133,7 @@ export function StudioScreen() {
   /* --- preview: one preview per Studio session; the draft rides on it ---------------------- */
   const [preview, setPreview] = useState<{ id: string } | null>(null);
   const spec: PreviewSpec | null = useMemo(() => {
+    if (aiPatch) return { base: 'live', include: [aiPatch.id], exclude: [], draft: null, resolverMode: 'smart' };
     if (viewFixId && !picked) return { base: 'live', include: [viewFixId], exclude: [], draft: null, resolverMode: 'smart' };
     if (sentPatch) return { base: 'live', include: [sentPatch.id], exclude: [], draft: null, resolverMode: 'smart' };
     const anchors: Record<string, Picked['fingerprint']> = {};
@@ -144,7 +153,7 @@ export function StudioScreen() {
         : null;
     return { base: 'live', include: [], exclude: [], draft, resolverMode: 'smart' };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [JSON.stringify([picked?.fingerprint, form, effectiveTitle, removedChecks, sentPatch?.id, sentPatch?.revision, viewFixId])]);
+  }, [JSON.stringify([picked?.fingerprint, form, effectiveTitle, removedChecks, sentPatch?.id, sentPatch?.revision, viewFixId, aiPatch?.id, aiPatch?.revision])]);
 
   const specJson = JSON.stringify(spec);
   const lastSpec = useRef<string>('');
@@ -223,6 +232,10 @@ export function StudioScreen() {
   };
 
   const reset = () => {
+    setAiPatch(null);
+    setAiMeta(null);
+    setAiLog([]);
+    setAiError(null);
     setPicked(null);
     setForm(emptyForm());
     setTitle('');
@@ -233,6 +246,105 @@ export function StudioScreen() {
     setError(null);
     setStep(1);
     send(highlightMessage(null), previewFrame.current);
+  };
+
+  /** Draft -> test in a real browser -> (if it fails) one revision -> re-test. Never submits. */
+  const askPatchwork = async () => {
+    if (!project || !preview || instruction.trim().length < 3) return;
+    reset();
+    setBusy('ai');
+    const log: Array<{ text: string; state: 'running' | 'done' | 'failed' }> = [];
+    const push = (text: string, state: 'running' | 'done' | 'failed' = 'running') => {
+      log.push({ text, state });
+      setAiLog([...log]);
+    };
+    const finish = (state: 'done' | 'failed', text?: string) => {
+      const last = log[log.length - 1];
+      if (last) log[log.length - 1] = { text: text ?? last.text, state };
+      setAiLog([...log]);
+    };
+    const started = Date.now();
+    const ticker = window.setInterval(() => setElapsed(Math.round((Date.now() - started) / 1000)), 500);
+    const showInPreview = async (patchId: string) => {
+      const s: PreviewSpec = { base: 'live', include: [patchId], exclude: [], draft: null, resolverMode: 'smart' };
+      await api.updatePreview(preview.id, s);
+      lastSpec.current = JSON.stringify(s);
+      setPreviewKey((k) => k + 1);
+    };
+    const test = async (): Promise<VerificationRun> => {
+      let r = await api.runVerification(project.id, { kind: 'preview', previewId: preview.id });
+      while (r.status === 'queued' || r.status === 'running') {
+        await new Promise((ok) => setTimeout(ok, 1000));
+        r = await api.verification(r.id);
+      }
+      setRun(r);
+      return r;
+    };
+    const failureOf = (r: VerificationRun): string => {
+      const step = r.steps.find((s) => !s.ok && s.patchId === aiPatchRef.current?.id) ?? r.steps.find((s) => !s.ok);
+      if (step) return `${stepText(step.step)} failed: ${step.error ?? 'no detail'}`;
+      const notApplied = r.patchApplication.find((p) => !p.applied && p.reason !== 'path_mismatch');
+      if (notApplied) return `the fix could not be applied (${notApplied.reason.replace(/_/g, ' ')})`;
+      if (r.newConsoleErrors.length) {
+        // a page error after the click means the site's own handler still ran: the click was not replaced
+        const ranOwn = r.steps.some((s) => s.step.action === 'click' && s.ok);
+        return ranOwn
+          ? `after the click the site's own broken click handler still ran (${r.newConsoleErrors[0]}), so the fix did not replace what the click does`
+          : `new page error: ${r.newConsoleErrors[0]}`;
+      }
+      return r.summary;
+    };
+    try {
+      push(`Drafting with the local model…`);
+      const d = await api.assistDraft(project.id, { path, instruction: instruction.trim(), pickedElementPath: picked?.elementPath ?? null });
+      aiPatchRef.current = d.patch;
+      setAiPatch(d.patch);
+      setAiMeta({ model: d.model, element: d.element.text ? `“${d.element.text}”` : `the ${d.element.tag}` });
+      finish('done', `Drafted “${d.summary}” on ${d.element.text ? `“${d.element.text}”` : d.element.tag} (${d.model}, ${(d.latencyMs / 1000).toFixed(1)} s)`);
+      await showInPreview(d.patch.id);
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        push('Testing in a real browser…');
+        const r = await test();
+        if (r.status === 'passed') {
+          finish('done', 'Passed in a real browser ✓');
+          break;
+        }
+        const why = failureOf(r);
+        finish('failed', `Failed: ${why}`);
+        if (attempt === 2) {
+          push('Two attempts used. Over to you: fix it manually or send it as is for review.', 'failed');
+          break;
+        }
+        push('Revising with the test result…');
+        const rv = await api.assistRevise(aiPatchRef.current!.id, { instruction: instruction.trim(), failure: why });
+        aiPatchRef.current = rv.patch;
+        setAiPatch(rv.patch);
+        setAiMeta({ model: rv.model, element: rv.element.text ? `“${rv.element.text}”` : `the ${rv.element.tag}` });
+        finish('done', `Revised: “${rv.summary}” (${(rv.latencyMs / 1000).toFixed(1)} s)`);
+        await showInPreview(rv.patch.id);
+      }
+      setStep(3);
+    } catch (err) {
+      finish('failed');
+      setAiError(err);
+    } finally {
+      window.clearInterval(ticker);
+      setBusy(null);
+    }
+  };
+  const aiPatchRef = useRef<Patch | null>(null);
+
+  const sendAiForReview = async () => {
+    if (!aiPatch) return;
+    setBusy('send');
+    setError(null);
+    try {
+      setSentPatch(await api.submitPatch(aiPatch.id));
+    } catch (err) {
+      setError(err);
+    } finally {
+      setBusy(null);
+    }
   };
 
   /* --- prove: a real browser run of this preview ------------------------------------------ */
@@ -421,6 +533,32 @@ export function StudioScreen() {
 
       {/* ---------------- fix panel ---------------- */}
       <aside className={styles.panel} aria-label="Fix it">
+        <form
+          className={styles.ask}
+          onSubmit={(e) => {
+            e.preventDefault();
+            void askPatchwork();
+          }}
+        >
+          <label htmlFor="ask-input" className={styles.askLabel}>
+            Ask PATCHWORK
+          </label>
+          <div className={styles.askRow}>
+            <input
+              id="ask-input"
+              value={instruction}
+              onChange={(e) => setInstruction(e.target.value)}
+              placeholder="e.g. make the checkout button take people to checkout…"
+              name="ask"
+              autoComplete="off"
+            />
+            <button type="submit" className="btn btn--patch" disabled={busy !== null || !preview || instruction.trim().length < 3}>
+              {busy === 'ai' ? `Thinking… ${elapsed} s` : 'Draft it'}
+            </button>
+          </div>
+          <span className="muted">A local model drafts and tests the fix on {path}{picked ? `, around ${labelOf(picked)}` : ''}. People review and ship it.</span>
+        </form>
+
         <ol className={styles.steps}>
           {(['Pick', 'Fix', 'Prove'] as const).map((label, i) => (
             <li key={label}>
@@ -437,7 +575,58 @@ export function StudioScreen() {
           ))}
         </ol>
 
-        {step === 1 ? (
+        {aiLog.length > 0 || aiPatch || aiError ? (
+          <div className={styles.stepBody}>
+            <div className={styles.aiBadge}>AI draft — review before sending</div>
+            <ol className={styles.aiLog} aria-live="polite">
+              {aiLog.map((l, i) => (
+                <li key={i} className={styles[`ai_${l.state}`]}>
+                  <span aria-hidden="true">{l.state === 'done' ? '✓' : l.state === 'failed' ? '✕' : '◔'}</span> {l.text}
+                  {l.state === 'running' && busy === 'ai' ? <span className="muted"> {elapsed} s</span> : null}
+                </li>
+              ))}
+            </ol>
+            {aiPatch ? (
+              <>
+                <h2>{aiPatch.title}</h2>
+                <ul className={styles.checks}>
+                  {aiPatch.ops.map((op, i) => (
+                    <li key={i}>{describePatchOp(op, aiPatch.anchors)}</li>
+                  ))}
+                  {aiPatch.checks.map((c, i) => (
+                    <li key={`c${i}`} className="muted">
+                      Browser check: {cap(stepText(c).replace('the picked element', aiMeta?.element ?? 'the element'))}
+                    </li>
+                  ))}
+                </ul>
+              </>
+            ) : null}
+            {aiError ? <PlainError error={aiError} /> : null}
+            {error ? <PlainError error={error} /> : null}
+            <div className={styles.footer}>
+              {sentPatch ? (
+                <span className={styles.sent}>
+                  <PatchStatusChip status={sentPatch.status} /> Sent. A reviewer picks it up in Review.
+                </span>
+              ) : (
+                <button type="button" className="btn" disabled={busy !== null} onClick={reset}>
+                  Fix it manually
+                </button>
+              )}
+              {sentPatch ? (
+                <button type="button" className="btn" onClick={reset}>
+                  Fix something else
+                </button>
+              ) : (
+                <button type="button" className="btn btn--patch" disabled={busy !== null || !aiPatch} onClick={() => void sendAiForReview()}>
+                  {busy === 'send' ? 'Sending…' : 'Send for review'}
+                </button>
+              )}
+            </div>
+          </div>
+        ) : null}
+
+        {step === 1 && aiLog.length === 0 && !aiPatch && !aiError ? (
           <div className={styles.stepBody}>
             <h2>Pick what is broken</h2>
             <p className={styles.lede}>
@@ -464,7 +653,7 @@ export function StudioScreen() {
           </div>
         ) : null}
 
-        {step === 2 && picked ? (
+        {step === 2 && picked && !aiPatch && aiLog.length === 0 ? (
           <div className={styles.stepBody}>
             <div className={styles.pickedChip}>
               <span className={styles.tagBadge}>{picked.fingerprint.tag}</span>
@@ -516,7 +705,7 @@ export function StudioScreen() {
           </div>
         ) : null}
 
-        {step === 3 && picked ? (
+        {step === 3 && picked && !aiPatch && aiLog.length === 0 ? (
           <div className={styles.stepBody}>
             <h2>Prove it works</h2>
             <p className={styles.lede}>A real browser will open the preview and check these things.</p>

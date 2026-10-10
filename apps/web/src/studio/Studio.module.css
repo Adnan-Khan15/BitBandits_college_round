@@ -482,3 +482,71 @@
     border-top: 1px solid var(--line-strong);
   }
 }
+
+/* ---- Ask PATCHWORK ---- */
+
+.ask {
+  display: grid;
+  gap: 0.35rem;
+  padding: 0.9rem 1.25rem;
+  border-bottom: 1px solid var(--line);
+  background: var(--patch-soft);
+}
+
+.askLabel {
+  font-weight: 650;
+  font-size: var(--fs-s);
+  color: var(--patch);
+}
+
+.askRow {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.askRow input {
+  flex: 1;
+  min-width: 0;
+  padding: 0.45rem 0.55rem;
+  border: 1px solid var(--patch-line);
+  border-radius: var(--radius);
+  background: #fff;
+  font: inherit;
+}
+
+.aiBadge {
+  align-self: flex-start;
+  padding: 0.15rem 0.5rem;
+  border: 1px solid var(--patch);
+  border-radius: 3px;
+  color: var(--patch);
+  font-size: var(--fs-xs);
+  font-weight: 650;
+}
+
+.aiLog {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--fs-s);
+}
+
+.aiLog li {
+  padding: 0.3rem 0;
+}
+
+.aiLog li + li {
+  border-top: 1px dashed var(--line);
+}
+
+.ai_done span:first-child {
+  color: var(--healthy);
+}
+
+.ai_failed {
+  color: var(--broken);
+}
+
+.ai_running span:first-child {
+  color: var(--blueprint);
+}

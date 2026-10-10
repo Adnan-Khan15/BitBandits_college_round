@@ -121,6 +121,17 @@ export const api = {
   projects: () => request<{ items: Project[] }>(apiPaths.projects()),
   /** The site the live and preview gateways serve now. */
   activeProject: () => request<Project>('/api/active-project'),
+  /** Ask PATCHWORK: the local model drafts a fix (never submitted, merged or deployed by the AI). */
+  assistDraft: (pid: string, body: { path: string; instruction: string; pickedElementPath?: string | null }) =>
+    post<{ patch: Patch; previewUrl: string; summary: string; model: string; latencyMs: number; element: { tag: string; text: string } }>(
+      `/api/projects/${encodeURIComponent(pid)}/assist/draft`,
+      body,
+    ),
+  assistRevise: (patchId: string, body: { instruction: string; failure: string }) =>
+    post<{ patch: Patch; summary: string; model: string; latencyMs: number; element: { tag: string; text: string } }>(
+      `/api/patches/${encodeURIComponent(patchId)}/assist/revise`,
+      body,
+    ),
   framing: (pid: string) => request<{ framable: boolean }>(`/api/projects/${encodeURIComponent(pid)}/framing`),
   setActiveProject: (projectId: string) => put<Project>('/api/active-project', { projectId }),
   connectSite: (body: { name: string; upstreamOrigin: string; paths: string[] }) => post<Project>(apiPaths.projects(), body),
