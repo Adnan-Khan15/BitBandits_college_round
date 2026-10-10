@@ -4,11 +4,10 @@
 // Stubs answer 501 with the ApiError shape so teammates can build against the API
 // surface from hour 0; each owner replaces their own module, never this file.
 import Fastify, { type FastifyInstance, type RouteOptions } from 'fastify';
-import type { FastifyReply, FastifyRequest } from 'fastify';
-import { ZodError } from 'zod';
-import { AppError, isAppError, USER_HEADER } from '@patchwork/shared';
+import { AppError, USER_HEADER } from '@patchwork/shared';
 import type { ServiceRegistry } from '@patchwork/shared';
 import type { Db } from './db/sqlite.js';
+import { installApiErrorHandling } from './core/http.js';
 import { registerCoreRoutes } from './core/routes.js';
 import { registerSnapshotRoutes } from './snapshots/index.js';
 import { registerVerifyRoutes } from './verify/index.js';
@@ -40,30 +39,9 @@ export function buildControlApp(opts: AppOptions): FastifyInstance {
   const { registry, db } = opts;
   const app = Fastify({ logger: opts.logger ?? false });
 
-  // Request id on every response (PLAN 11.11: ApiError carries requestId).
-  app.addHook('onRequest', async (req, reply) => {
-    reply.header('x-request-id', req.id);
-  });
-
-  // Global error handler: AppError and zod errors become ApiError JSON (PLAN 11.11).
-  app.setErrorHandler((err, req: FastifyRequest, reply: FastifyReply) => {
-    const requestId = String(req.id);
-    if (isAppError(err)) {
-      return reply.status(err.httpStatus).send(err.toApiError(requestId));
-    }
-    if (err instanceof ZodError) {
-      const appErr = new AppError('VALIDATION_FAILED', 'Request failed validation', err.issues);
-      return reply.status(appErr.httpStatus).send(appErr.toApiError(requestId));
-    }
-    req.log.error(err);
-    const internal = new AppError('INTERNAL', 'Internal server error');
-    return reply.status(500).send(internal.toApiError(requestId));
-  });
-
-  app.setNotFoundHandler((req, reply) => {
-    const notFound = new AppError('NOT_FOUND', `No route for ${req.method} ${req.url}`);
-    reply.status(404).send(notFound.toApiError(String(req.id)));
-  });
+  // Shared ApiError rendering (request id, error handler, not-found). The live and
+  // preview gateways call the same helper from main.ts, so all three instances agree.
+  installApiErrorHandling(app);
 
   // Identity: a picker, not auth (PLAN section 16 "Honest limits"). Unknown user -> 403.
   app.addHook('preHandler', async (req) => {

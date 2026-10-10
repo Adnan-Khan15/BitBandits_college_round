@@ -36,6 +36,10 @@ contracts, schedule) and packages/shared (types). If they disagree, STOP and rep
 ## Quality bar
 - TypeScript strict; no `any` in exported signatures; no stubs left in code you mark done.
 - Every exported function has a unit test. Run `npm run typecheck && npm test` before reporting done.
+- Test-file location: co-locate unit tests with the code they test (`apps/server/src/**/*.test.ts`,
+  `packages/*/src/**/*.test.ts`); put route/integration tests in the workspace `test/` dir
+  (`apps/server/test/*.test.ts`, `packages/*/test/*.test.ts`). Vitest runs both and `typecheck`
+  now includes both, so there is no "invisible test" gap.
 - No mock data presented as real results. No fake API responses outside tests.
 - Errors use the ApiError shape in packages/shared/src/errors.ts.
 

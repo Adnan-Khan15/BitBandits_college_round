@@ -47,5 +47,8 @@ playwright-report/
 packages/runtime/dist/
 apps/web/dist/
 
+# Logs
+*.log
+
 #Misc
 PLAN.MD
