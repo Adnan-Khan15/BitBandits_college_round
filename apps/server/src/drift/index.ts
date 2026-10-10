@@ -8,9 +8,9 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { FastifyInstance } from 'fastify';
 import { nanoid } from 'nanoid';
-import { AppError, USER_HEADER } from '@patchwork/shared';
+import { AppError, DEFAULT_THRESHOLDS, USER_HEADER } from '@patchwork/shared';
 import type { BenchRow, DriftReport, DriftService, FrozenPatch, ServiceRegistry } from '@patchwork/shared';
-import { analyzeDrift } from '@patchwork/engine';
+import { analyzeDrift, resolveAnchor } from '@patchwork/engine';
 import { documentFromHtml } from '@patchwork/engine/node';
 import type { Db } from '../db/sqlite.js';
 import { createDriftRepo, type DriftRepo } from './repo.js';
@@ -27,6 +27,11 @@ function pathMatches(pattern: string, path: string): boolean {
   return false;
 }
 
+/** DriftService plus a lookup by id, used by the explain route. */
+export interface DriftServiceExt extends DriftService {
+  get(id: string): DriftReport | null;
+}
+
 export interface DriftServiceOptions {
   benchFile?: string;
 }
@@ -35,7 +40,7 @@ export function createDriftService(
   registry?: ServiceRegistry,
   db?: Db,
   opts: DriftServiceOptions = {},
-): DriftService {
+): DriftServiceExt {
   const benchFile = opts.benchFile ?? DEFAULT_BENCH_FILE;
   let repo: DriftRepo | null = null;
 
@@ -119,6 +124,10 @@ export function createDriftService(
 
     list(projectId): DriftReport[] {
       return requireDeps().repo.list(projectId);
+    },
+
+    get(id): DriftReport | null {
+      return requireDeps().repo.get(id);
     },
 
     async proposeQuarantine(reportId, actorId) {
@@ -218,7 +227,50 @@ export function registerDriftRoutes(app: FastifyInstance, registry: ServiceRegis
       return registry.drift.proposeQuarantine(id, actorOf(req));
     });
   }
+  // Explain a drift report in words, and show what a selector-only tool would have done on the
+  // same snapshot: the stored CSS selector, resolved with resolverMode 'selector' (baseline B1).
+  app.get('/api/drift/:id/explain', async (req) => {
+    const { id } = req.params as { id: string };
+    const report = (registry.drift as DriftServiceExt).get(id);
+    if (!report) throw new AppError('NOT_FOUND', `No drift report ${id}`);
+    const snapshot = registry.snapshots.get(report.snapshotId);
+    const release = registry.releases.get(report.releaseId);
+    const project = registry.core.getProject(report.projectId);
+    if (!snapshot || !release || !project) throw new AppError('NOT_FOUND', `Drift report ${id} is missing its snapshot or release`);
+    const doc = documentFromHtml(snapshot.html, `${project.upstreamOrigin}${report.path}`).document;
+    const textAt = (path: string | null | undefined): string | null => {
+      if (!path) return null;
+      const el = doc.querySelector(path);
+      const text = (el?.textContent ?? '').replace(/\s+/g, ' ').trim();
+      return el ? text.slice(0, 80) || `<${el.tagName.toLowerCase()}>` : null;
+    };
+    return {
+      items: report.results.map((result) => {
+        const patch = release.patches.find((p) => p.patchId === result.patchId);
+        return {
+          patchId: result.patchId,
+          title: patch?.title ?? result.patchId,
+          anchors: result.resolutions.map((res) => {
+            const fp = patch?.anchors[res.anchorId];
+            const selector = fp
+              ? resolveAnchor(doc, res.anchorId, fp, { mode: 'selector', thresholds: { ...DEFAULT_THRESHOLDS } })
+              : null;
+            return {
+              anchorId: res.anchorId,
+              originalText: fp?.text ?? null,
+              matchedText: textAt(res.elementPath),
+              runnerUpText: textAt(res.runnerUp?.elementPath),
+              selectorFound: selector !== null && selector.status !== 'not_found' && selector.elementPath !== null,
+              selectorText: selector ? textAt(selector.elementPath) : null,
+            };
+          }),
+        };
+      }),
+    };
+  });
+
   if (!app.hasRoute({ method: 'GET', url: '/api/bench' })) {
     app.get('/api/bench', async () => ({ items: registry.drift.bench() }));
   }
 }
+
