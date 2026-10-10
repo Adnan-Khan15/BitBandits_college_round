@@ -17,7 +17,8 @@ export function buildRegistry(db: Db): ServiceRegistry {
   registry.snapshots = createSnapshotService();
   registry.verify = createVerifyService();
   registry.releases = createReleaseService();
-  registry.drift = createDriftService();
-  void db; // repositories receive the db in Phase 2; the shape is frozen now.
+  // Dev B handoff (per PLAN 13.4): the drift service reaches the registry (snapshots,
+  // releases, core.proposeHeal) and the db (drift_reports) through these arguments.
+  registry.drift = createDriftService(registry, db);
   return registry;
 }
