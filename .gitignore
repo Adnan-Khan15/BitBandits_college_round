@@ -39,3 +39,10 @@ Thumbs.db
 ehthumbs.db
 Desktop.ini
 .DS_Store
+
+# PATCHWORK runtime data (PLAN section 3)
+data/
+test-results/
+playwright-report/
+packages/runtime/dist/
+apps/web/dist/
