@@ -8,6 +8,7 @@ import styles from './OverviewScreen.module.css';
 
 interface Overview {
   project: Project | null;
+  releases: { items: Release[] } | null;
   liveRelease: Release | null;
   patches: Patch[];
   users: User[];
@@ -17,23 +18,26 @@ interface Overview {
 /**
  * Overview — the state strip. For a tool there is no marketing hero: the first
  * thing you see is the current state of the world — which project, what is
- * live, what is waiting, whether the audit chain still verifies.
+ * live, what is waiting, whether the audit chain still verifies. Each panel
+ * degrades on its own: an endpoint that is not implemented yet (stub or 404)
+ * takes only its own panel offline, never the whole screen.
  */
 export function OverviewScreen() {
   const { data, error, loading } = usePoll<Overview>(async () => {
     const [projects, users] = await Promise.all([api.projects(), api.users()]);
     const project = projects.items[0] ?? null;
     if (!project) {
-      return { project: null, liveRelease: null, patches: [], users: users.items, audit: null };
+      return { project: null, releases: null, liveRelease: null, patches: [], users: users.items, audit: null };
     }
-    const [releases, patches, audit] = await Promise.all([
-      api.releases(project.id),
+    const [patches, releases, audit] = await Promise.all([
       api.patches(project.id),
-      api.auditVerify(project.id),
+      api.releases(project.id).catch(() => null),
+      api.auditVerify(project.id).catch(() => null),
     ]);
     return {
       project,
-      liveRelease: releases.items.find((r) => r.status === 'live') ?? null,
+      releases,
+      liveRelease: releases?.items.find((r) => r.status === 'live') ?? null,
       patches: patches.items,
       users: users.items,
       audit,
@@ -51,7 +55,7 @@ export function OverviewScreen() {
     );
   }
 
-  const { project, liveRelease, patches, users, audit } = data;
+  const { project, releases, liveRelease, patches, users, audit } = data;
   const byStatus = (status: string) => patches.filter((p) => p.status === status).length;
 
   return (
@@ -78,7 +82,11 @@ export function OverviewScreen() {
       <div className={styles.grid}>
         <div className={styles.panel}>
           <h2>Live release</h2>
-          {liveRelease ? (
+          {releases === null ? (
+            <p className="prose">
+              Release data is not available yet — it lands with Dev C's releases service (step 9).
+            </p>
+          ) : liveRelease ? (
             <p>
               <strong className="num">R{liveRelease.number}</strong>{' '}
               <ReleaseStatusChip status={liveRelease.status} />
