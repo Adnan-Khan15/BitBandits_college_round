@@ -1,0 +1,7 @@
+{
+  "id": "dev-tag-01",
+  "category": "tag",
+  "targetBefore": "#save-cart",
+  "expectedAfter": "#save-cart",
+  "notes": "Tag changed from button to a[role=button] with an href added; id, classes and text unchanged. a and button are in the related tag group (similarity 0.5). Expected: exact, or relocated if the dropped tag score dips below 0.90."
+}

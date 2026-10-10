@@ -1,0 +1,7 @@
+{
+  "id": "dev-removed-02",
+  "category": "removed",
+  "targetBefore": "#row-mouse .remove-item",
+  "expectedAfter": null,
+  "notes": "The mouse row's Remove link is deleted; the cable row keeps an identical link. Tests that the resolver reports the target not_found rather than snapping to the surviving twin. Expected: not_found."
+}

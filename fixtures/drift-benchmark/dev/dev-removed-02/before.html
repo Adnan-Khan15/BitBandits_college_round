@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>ShopLite — Cart</title>
+<style>
+body{font-family:system-ui,sans-serif;margin:0;background:#f6f7f9;color:#1a1a1a}
+.wrap{max-width:720px;margin:0 auto;padding:24px}
+h1{font-size:20px}
+.card{background:#fff;border:1px solid #e3e6ea;border-radius:8px;padding:16px}
+.cart-list{list-style:none;margin:0;padding:0}
+.cart-row{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #eef1f4;font-size:14px}
+.remove-item{color:#a33;text-decoration:none;font-size:13px}
+.total{margin-top:12px;font-weight:600;font-size:14px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>Your cart</h1>
+<div class="card">
+<ul class="cart-list">
+<li id="row-mouse" class="cart-row"><span class="cart-item-name">Wireless Mouse</span><a class="remove-item" href="#">Remove</a></li>
+<li id="row-cable" class="cart-row"><span class="cart-item-name">USB-C Cable</span><a class="remove-item" href="#">Remove</a></li>
+</ul>
+<p class="total">Total: ₹1,798</p>
+</div>
+</div>
+</body>
+</html>

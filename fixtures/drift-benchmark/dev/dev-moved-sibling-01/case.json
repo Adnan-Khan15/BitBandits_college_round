@@ -1,0 +1,7 @@
+{
+  "id": "dev-moved-sibling-01",
+  "category": "moved",
+  "targetBefore": ".add-to-cart",
+  "expectedAfter": ".add-to-cart",
+  "notes": "Add-to-cart button swapped with the price span inside the same parent; only siblingIndex and neighbourText change. Expected: exact if the cached cssPath still resolves and scores >= 0.90, otherwise relocated."
+}
