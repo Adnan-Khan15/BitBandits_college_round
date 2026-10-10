@@ -7,7 +7,8 @@ import { Notice } from './components/Notice.js';
 import { StudioScreen } from './studio/StudioScreen.js';
 import { ReviewScreen } from './screens/ReviewScreen.js';
 import { ShipScreen } from './screens/ShipScreen.js';
-import { DriftAuditScreen } from './screens/DriftAuditScreen.js';
+import { DriftScreen } from './screens/DriftScreen.js';
+import { HistoryScreen } from './screens/HistoryScreen.js';
 import { ensureDefaultUser } from './team.js';
 import styles from './App.module.css';
 
@@ -43,7 +44,8 @@ export function App() {
         {section === 'studio' ? <StudioScreen /> : null}
         {section === 'review' ? <ReviewScreen /> : null}
         {section === 'ship' ? <ShipScreen /> : null}
-        {section === 'drift' || section === 'history' ? <DriftAuditScreen /> : null}
+        {section === 'drift' ? <DriftScreen /> : null}
+        {section === 'history' ? <HistoryScreen /> : null}
         {!known.includes(section) ? (
           <Notice tone="error" title="Page not found">
             There is no page called “{raw}”. <a href="#/studio">Go to the Studio</a>.

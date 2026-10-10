@@ -1,0 +1,212 @@
+.drift {
+  max-width: 72rem;
+}
+
+.lede {
+  max-width: 70ch;
+  margin: 0.4rem 0 1.25rem;
+  color: var(--ink-2);
+}
+
+.small {
+  font-size: var(--fs-xs);
+  color: var(--ink-2);
+}
+
+.drill {
+  padding: 1rem 1.1rem;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--surface);
+}
+
+.drillHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.steps {
+  margin: 1rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.steps li {
+  display: flex;
+  gap: 0.6rem;
+  padding: 0.45rem 0;
+  font-size: var(--fs-s);
+  border-top: 1px solid var(--line);
+}
+
+.stepGlyph {
+  width: 1.1rem;
+  text-align: center;
+  color: var(--ink-3);
+}
+
+.done .stepGlyph {
+  color: var(--healthy);
+}
+
+.running .stepGlyph {
+  color: var(--blueprint);
+}
+
+.failed .stepGlyph {
+  color: var(--broken);
+}
+
+.todo {
+  color: var(--ink-3);
+}
+
+.shipRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--line);
+}
+
+.block {
+  margin-top: 2rem;
+}
+
+.block > h2 {
+  margin-bottom: 0.5rem;
+}
+
+.blockHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.3rem 0.6rem;
+  border: 1px solid var(--patch-line);
+  border-radius: 999px;
+  background: var(--patch-soft);
+  font-size: var(--fs-s);
+  font-weight: 560;
+  cursor: pointer;
+}
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(20rem, 1fr));
+  gap: 0.75rem;
+}
+
+.card {
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--surface);
+}
+
+.cardHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.cardHead h3 {
+  font-size: var(--fs-m);
+}
+
+.evidence {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.sentence {
+  margin: 0;
+  font-size: var(--fs-s);
+}
+
+/* ---- benchmark: two small multiples, one axis each (0-100%) ---- */
+
+.charts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
+  gap: 1.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.chart {
+  margin: 0;
+}
+
+.chart figcaption {
+  margin-bottom: 0.5rem;
+  font-size: var(--fs-s);
+}
+
+.barRow {
+  display: grid;
+  grid-template-columns: 7.5rem 1fr 3.5rem;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.3rem 0;
+  border-radius: 3px;
+}
+
+.barRow:hover {
+  background: var(--surface-sunk);
+}
+
+.barLabel {
+  font-size: var(--fs-s);
+  color: var(--ink);
+}
+
+.barTrack {
+  position: relative;
+  height: 0.75rem;
+  border-left: 1px solid var(--line-strong); /* the zero baseline */
+}
+
+.bar {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: 0 4px 4px 0; /* rounded data end, square at the baseline */
+  background: #0d7fa8;
+}
+
+.barOurs {
+  background: var(--patch);
+}
+
+.barValue {
+  font-size: var(--fs-s);
+  color: var(--ink);
+  text-align: right;
+}
+
+.linkBtn {
+  margin: 0.25rem 0 0.75rem;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--blueprint);
+  font-size: var(--fs-s);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}

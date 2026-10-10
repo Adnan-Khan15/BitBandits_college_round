@@ -1,0 +1,133 @@
+.history {
+  max-width: 56rem;
+}
+
+.head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.small {
+  font-size: var(--fs-xs);
+  color: var(--ink-2);
+}
+
+.how {
+  margin: 0.75rem 0 1rem;
+  font-size: var(--fs-s);
+  color: var(--ink-2);
+}
+
+.how summary {
+  cursor: pointer;
+  color: var(--blueprint);
+}
+
+.how p {
+  max-width: 70ch;
+  margin-top: 0.4rem;
+}
+
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-bottom: 1.25rem;
+}
+
+.filter {
+  padding: 0.25rem 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  font-size: var(--fs-s);
+  cursor: pointer;
+}
+
+.filter[aria-pressed='true'] {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: #fff;
+}
+
+.timeline {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.event {
+  display: flex;
+  gap: 0.75rem;
+  padding: 0.55rem 0;
+  border-top: 1px solid var(--line);
+}
+
+.avatar {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 50%;
+  background: var(--surface-sunk);
+  color: var(--ink-2);
+  font-size: var(--fs-s);
+  font-weight: 650;
+}
+
+.body {
+  min-width: 0;
+}
+
+.sentence {
+  margin: 0;
+  font-size: var(--fs-m);
+}
+
+.icon {
+  color: var(--ink-3);
+}
+
+.rollbacks .icon,
+.conflicts .icon {
+  color: var(--broken);
+}
+
+.releases .icon {
+  color: var(--healthy);
+}
+
+.fixes .icon {
+  color: var(--patch);
+}
+
+.meta {
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.details {
+  margin-left: 0.6rem;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink-3);
+  font-size: var(--fs-xs);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.raw {
+  max-width: 100%;
+  overflow-x: auto;
+  margin: 0.4rem 0 0;
+  padding: 0.5rem 0.6rem;
+  border-radius: 3px;
+  background: var(--surface-sunk);
+  font-size: var(--fs-xs);
+}

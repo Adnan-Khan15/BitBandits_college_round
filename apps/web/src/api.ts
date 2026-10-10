@@ -170,4 +170,21 @@ export const api = {
     post<Patch>(apiPaths.driftAssistAccept(reportId), body),
 
   bench: () => request<{ items: Array<Record<string, unknown>> }>(apiPaths.bench()),
+
+  /** Drift report in words + what a selector-only tool would have done on the same snapshot. */
+  driftExplain: (reportId: string) =>
+    request<{
+      items: Array<{
+        patchId: string;
+        title: string;
+        anchors: Array<{
+          anchorId: string;
+          originalText: string | null;
+          matchedText: string | null;
+          runnerUpText: string | null;
+          selectorFound: boolean;
+          selectorText: string | null;
+        }>;
+      }>;
+    }>(`/api/drift/${encodeURIComponent(reportId)}/explain`),
 };
